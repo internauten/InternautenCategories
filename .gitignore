@@ -1,0 +1,36 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+*.tmp
+*.swp
+
+# IDE / Editor
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# PHP / Composer
+vendor/
+
+# Node (if used for tooling)
+node_modules/
+
+# Archive/build artifacts
+*.zip
+dist/
+build/
+coverage/
+
+# Test/cache/runtime
+.cache/
+.phpunit.result.cache
+
+# PrestaShop local artifacts (when testing module in a local shop copy)
+**/var/cache/
+**/var/logs/
