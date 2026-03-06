@@ -50,3 +50,19 @@ Beispiel:
 git tag v1.0.0
 git push origin v1.0.0
 ```
+
+### Create and push tag from module version
+
+You can create and push a release tag directly from the version in `internautenb2binfo/internautenb2binfo.php` (`$this->version`) with:
+
+```bash
+./scripts/tag-from-module-version.sh
+```
+
+The script reads the module version, creates an annotated tag in the format `v<version>`, and pushes it to `origin`.
+
+Use a dry-run to preview the tag command without creating or pushing anything:
+
+```bash
+./scripts/tag-from-module-version.sh --dry-run
+```
