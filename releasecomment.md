@@ -1,6 +1,6 @@
 # Release Notes
 
-Kurze Zusammenfassung der Version.
+Erste Version.
 
 ## Highlights
 
