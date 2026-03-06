@@ -1,0 +1,76 @@
+name: Release From Tag
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare release metadata
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG_NAME="${GITHUB_REF_NAME}"
+          MODULE_DIR="internautencategories"
+          ZIP_NAME="${MODULE_DIR}-${TAG_NAME}.zip"
+
+          if [ ! -d "${MODULE_DIR}" ]; then
+            echo "Expected module directory '${MODULE_DIR}' not found."
+            exit 1
+          fi
+
+          zip -r "${ZIP_NAME}" "${MODULE_DIR}" -x "*/.DS_Store" "*/Thumbs.db"
+
+          PREV_TAG="$(git describe --tags --abbrev=0 "${TAG_NAME}^" 2>/dev/null || true)"
+          if [ -n "${PREV_TAG}" ]; then
+            RANGE="${PREV_TAG}..${TAG_NAME}"
+          else
+            RANGE="${TAG_NAME}"
+          fi
+
+          COMMIT_LIST="$(git log --pretty=format:'- %s (%h)' ${RANGE} || true)"
+          if [ -z "${COMMIT_LIST}" ]; then
+            COMMIT_LIST="- No commits found for this release range"
+          fi
+
+          {
+            echo "# ${TAG_NAME}"
+            echo
+            echo "## Release Comment"
+            echo
+            if [ -f "releasecomment.md" ]; then
+              cat "releasecomment.md"
+            else
+              echo "_No releasecomment.md found in repository root._"
+            fi
+            echo
+            echo "## Commits"
+            echo
+            echo "${COMMIT_LIST}"
+          } > RELEASE_BODY.md
+
+          echo "zip_name=${ZIP_NAME}" >> "$GITHUB_OUTPUT"
+          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.prepare.outputs.tag_name }}
+          name: ${{ steps.prepare.outputs.tag_name }}
+          body_path: RELEASE_BODY.md
+          files: ${{ steps.prepare.outputs.zip_name }}
+          generate_release_notes: false

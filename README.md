@@ -24,3 +24,29 @@ Dieses Repository enthaelt ein PrestaShop-Modul, das Unterkategorien innerhalb e
 - Das Modul zeigt in der Konfiguration zusaetzlich eine automatische Batch-Empfehlung auf Basis der erkannten Unterkategorie-Anzahl.
 - Die automatische Empfehlung zeigt zusaetzlich eine farbliche Last-Stufe (`LOW`, `MEDIUM`, `HIGH`, `VERY HIGH`) zur schnelleren Einschaetzung.
 - Neben der Last-Stufe wird ein Info-Tooltip mit den genauen Schwellenwerten angezeigt (`<=200`, `<=1000`, `<=3000`, `>3000`).
+
+## GitHub Release Action
+
+Im Repository ist eine GitHub Action vorhanden, die bei einem Tag-Push automatisch einen Release inklusive Installations-ZIP erstellt.
+
+- Workflow-Datei: `.github/workflows/release-from-tag.yml`
+- Trigger: Push auf ein Tag (z. B. `v1.0.0`)
+- Artefakt: `internautencategories-<tag>.zip`
+
+Die Release-Beschreibung wird aus zwei Quellen zusammengesetzt:
+
+1. Inhalt aus `releasecomment.md`
+2. Commit-Messages seit dem vorherigen Tag
+
+### Verwendung
+
+1. `releasecomment.md` aktualisieren.
+2. Tag erstellen.
+3. Tag pushen.
+
+Beispiel:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
