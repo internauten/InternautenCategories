@@ -527,8 +527,7 @@ class InternautenCategories extends Module
                     AND cs.id_shop = ' . (int) $shopId . '
                 WHERE c.id_parent > 0
                 GROUP BY c.id_parent
-                ORDER BY children_count DESC
-                LIMIT 1';
+                ORDER BY children_count DESC';
 
         $maxCount = Db::getInstance()->getValue($sql);
 
