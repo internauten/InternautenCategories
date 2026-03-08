@@ -9,6 +9,8 @@ class InternautenCategories extends Module
     private const AJAX_ACTION_CATEGORY_CHILDREN = 'icGetCategoryChildren';
     private const AJAX_ACTION_EMPTY_CATEGORIES = 'icGetEmptyCategories';
     private const AJAX_ACTION_HIDE_EMPTY_CATEGORIES = 'icHideEmptyCategories';
+    private const AJAX_ACTION_HIDDEN_WITH_PRODUCTS = 'icGetHiddenWithProducts';
+    private const AJAX_ACTION_SHOW_HIDDEN_CATEGORIES = 'icShowHiddenCategories';
     private const CONFIG_CATEGORY_ID = 'IC_SORT_PARENT_CATEGORY_ID';
     private const CONFIG_LANGUAGE_ID = 'IC_SORT_PRIMARY_LANGUAGE_ID';
     private const CONFIG_SORT_ALL_LANGUAGES = 'IC_SORT_ALL_LANGUAGES';
@@ -80,6 +82,18 @@ class InternautenCategories extends Module
 
             if ($action === self::AJAX_ACTION_HIDE_EMPTY_CATEGORIES) {
                 $this->renderHideEmptyCategoriesAjax();
+
+                return '';
+            }
+
+            if ($action === self::AJAX_ACTION_HIDDEN_WITH_PRODUCTS) {
+                $this->renderHiddenWithProductsAjax();
+
+                return '';
+            }
+
+            if ($action === self::AJAX_ACTION_SHOW_HIDDEN_CATEGORIES) {
+                $this->renderShowHiddenCategoriesAjax();
 
                 return '';
             }
@@ -187,13 +201,17 @@ class InternautenCategories extends Module
 
         $idsSql = implode(',', $categoryIds);
         $db = Db::getInstance();
+        $categoryShopHasActiveColumn = $this->categoryShopHasActiveColumn();
 
-        $updatedShop = $db->execute(
+        $updatedShop = true;
+        if ($categoryShopHasActiveColumn) {
+            $updatedShop = $db->execute(
             'UPDATE `' . _DB_PREFIX_ . 'category_shop`
              SET `active` = 0
              WHERE `id_shop` = ' . (int) $shopId . '
                AND `id_category` IN (' . $idsSql . ')'
-        );
+            );
+        }
 
         $updatedCategory = $db->execute(
             'UPDATE `' . _DB_PREFIX_ . 'category`
@@ -215,8 +233,94 @@ class InternautenCategories extends Module
         ]);
     }
 
+    private function renderHiddenWithProductsAjax()
+    {
+        $shopId = (int) $this->context->shop->id;
+        $languageId = (int) $this->context->language->id;
+
+        $hiddenCategories = $this->getHiddenCategoriesWithProductsForDialog($shopId, $languageId);
+
+        $this->sendCategoryNavigatorJson([
+            'ok' => true,
+            'categories' => $hiddenCategories,
+        ]);
+    }
+
+    private function renderShowHiddenCategoriesAjax()
+    {
+        $shopId = (int) $this->context->shop->id;
+        $categoryIdsRaw = trim((string) Tools::getValue('category_ids', ''));
+
+        if ($categoryIdsRaw === '') {
+            $this->sendCategoryNavigatorJson([
+                'ok' => false,
+                'error' => $this->l('No categories selected.'),
+            ]);
+        }
+
+        $parts = array_filter(array_map('trim', explode(',', $categoryIdsRaw)), static function ($value) {
+            return $value !== '';
+        });
+
+        $categoryIds = [];
+        foreach ($parts as $part) {
+            if (!ctype_digit($part) || (int) $part <= 0) {
+                $this->sendCategoryNavigatorJson([
+                    'ok' => false,
+                    'error' => $this->l('Selected categories could not be updated.'),
+                ]);
+            }
+
+            $categoryIds[] = (int) $part;
+        }
+
+        $categoryIds = array_values(array_unique($categoryIds));
+        if (empty($categoryIds)) {
+            $this->sendCategoryNavigatorJson([
+                'ok' => false,
+                'error' => $this->l('No categories selected.'),
+            ]);
+        }
+
+        $idsSql = implode(',', $categoryIds);
+        $db = Db::getInstance();
+        $categoryShopHasActiveColumn = $this->categoryShopHasActiveColumn();
+
+        $updatedShop = true;
+        if ($categoryShopHasActiveColumn) {
+            $updatedShop = $db->execute(
+                'UPDATE `' . _DB_PREFIX_ . 'category_shop`
+                 SET `active` = 1
+                 WHERE `id_shop` = ' . (int) $shopId . '
+                   AND `id_category` IN (' . $idsSql . ')'
+            );
+        }
+
+        $updatedCategory = $db->execute(
+            'UPDATE `' . _DB_PREFIX_ . 'category`
+             SET `active` = 1
+             WHERE `id_category` IN (' . $idsSql . ')'
+        );
+
+        if (!$updatedShop || !$updatedCategory) {
+            $this->sendCategoryNavigatorJson([
+                'ok' => false,
+                'error' => $this->l('Selected categories could not be updated.'),
+            ]);
+        }
+
+        $this->sendCategoryNavigatorJson([
+            'ok' => true,
+            'updated' => count($categoryIds),
+            'message' => $this->l('Selected categories were set to visible.'),
+        ]);
+    }
+
     private function getEmptyCategoriesForDialog($shopId, $languageId)
     {
+        $categoryShopHasActiveColumn = $this->categoryShopHasActiveColumn();
+        $categoryShopActiveFilter = $categoryShopHasActiveColumn ? "\n                    AND cs.active = 1" : '';
+
         $sql = 'SELECT c.id_category, cl.name
                 FROM `' . _DB_PREFIX_ . 'category` c
                 INNER JOIN `' . _DB_PREFIX_ . 'category_shop` cs
@@ -228,7 +332,7 @@ class InternautenCategories extends Module
                     AND cl.id_shop = ' . (int) $shopId . '
                 WHERE c.id_parent > 0
                     AND c.active = 1
-                    AND cs.active = 1
+                    ' . $categoryShopActiveFilter . '
                     AND NOT EXISTS (
                         SELECT 1
                         FROM `' . _DB_PREFIX_ . 'category` c2
@@ -255,6 +359,59 @@ class InternautenCategories extends Module
                 'name' => (string) $row['name'],
             ];
         }, $rows);
+    }
+
+    private function getHiddenCategoriesWithProductsForDialog($shopId, $languageId)
+    {
+        $categoryShopHasActiveColumn = $this->categoryShopHasActiveColumn();
+        $hiddenFilter = $categoryShopHasActiveColumn
+            ? '(c.active = 0 OR cs.active = 0)'
+            : 'c.active = 0';
+
+        $sql = 'SELECT c.id_category, cl.name
+                FROM `' . _DB_PREFIX_ . 'category` c
+                INNER JOIN `' . _DB_PREFIX_ . 'category_shop` cs
+                    ON cs.id_category = c.id_category
+                    AND cs.id_shop = ' . (int) $shopId . '
+                INNER JOIN `' . _DB_PREFIX_ . 'category_lang` cl
+                    ON cl.id_category = c.id_category
+                    AND cl.id_lang = ' . (int) $languageId . '
+                    AND cl.id_shop = ' . (int) $shopId . '
+                WHERE c.id_parent > 0
+                    AND ' . $hiddenFilter . '
+                    AND EXISTS (
+                        SELECT 1
+                        FROM `' . _DB_PREFIX_ . 'category_product` cp
+                        WHERE cp.id_category = c.id_category
+                    )
+                ORDER BY cl.name ASC';
+
+        $rows = Db::getInstance()->executeS($sql);
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        return array_map(static function ($row) {
+            return [
+                'id' => (int) $row['id_category'],
+                'name' => (string) $row['name'],
+            ];
+        }, $rows);
+    }
+
+    private function categoryShopHasActiveColumn()
+    {
+        static $hasActiveColumn = null;
+
+        if ($hasActiveColumn !== null) {
+            return $hasActiveColumn;
+        }
+
+        $sql = 'SHOW COLUMNS FROM `' . _DB_PREFIX_ . 'category_shop` LIKE "active"';
+        $rows = Db::getInstance()->executeS($sql);
+        $hasActiveColumn = is_array($rows) && !empty($rows);
+
+        return $hasActiveColumn;
     }
 
     private function saveConfiguration()
@@ -765,6 +922,14 @@ class InternautenCategories extends Module
             . '&configure=' . $this->name
             . '&token=' . Tools::getAdminTokenLite('AdminModules')
             . '&ajax=1&action=' . self::AJAX_ACTION_HIDE_EMPTY_CATEGORIES;
+        $hiddenWithProductsAjaxUrl = AdminController::$currentIndex
+            . '&configure=' . $this->name
+            . '&token=' . Tools::getAdminTokenLite('AdminModules')
+            . '&ajax=1&action=' . self::AJAX_ACTION_HIDDEN_WITH_PRODUCTS;
+        $showHiddenCategoriesAjaxUrl = AdminController::$currentIndex
+            . '&configure=' . $this->name
+            . '&token=' . Tools::getAdminTokenLite('AdminModules')
+            . '&ajax=1&action=' . self::AJAX_ACTION_SHOW_HIDDEN_CATEGORIES;
 
         $texts = [
             'title' => $this->l('Category navigator'),
@@ -787,6 +952,14 @@ class InternautenCategories extends Module
             'hiding_in_progress' => $this->l('Updating categories...'),
             'hide_selected_success' => $this->l('Selected categories were set to hidden.'),
             'hide_selected_error' => $this->l('Selected categories could not be updated.'),
+            'show_hidden_with_products' => $this->l('Show hidden categories with products'),
+            'hidden_dialog_title' => $this->l('Hidden categories with products'),
+            'hidden_categories_loading' => $this->l('Loading hidden categories...'),
+            'hidden_categories_none' => $this->l('No hidden categories with products found.'),
+            'hidden_categories_error' => $this->l('Hidden categories could not be loaded.'),
+            'show_selected' => $this->l('Show selected categories in this shop'),
+            'show_selected_success' => $this->l('Selected categories were set to visible.'),
+            'show_selected_error' => $this->l('Selected categories could not be updated.'),
         ];
 
         $script = '<script type="text/javascript">
@@ -802,21 +975,28 @@ class InternautenCategories extends Module
     var selectedEl = navigatorRoot.querySelector("[data-role=ic-selected]");
     var backBtn = navigatorRoot.querySelector("[data-role=ic-back]");
     var showEmptyBtn = navigatorRoot.querySelector("[data-role=ic-show-empty]");
+    var showHiddenWithProductsBtn = navigatorRoot.querySelector("[data-role=ic-show-hidden-with-products]");
     var emptyDialog = navigatorRoot.querySelector("[data-role=ic-empty-dialog]");
     var emptyDialogCloseBtn = navigatorRoot.querySelector("[data-role=ic-empty-close]");
     var emptyDialogHideBtn = navigatorRoot.querySelector("[data-role=ic-empty-hide-selected]");
     var emptyDialogList = navigatorRoot.querySelector("[data-role=ic-empty-list]");
+    var hiddenDialog = navigatorRoot.querySelector("[data-role=ic-hidden-dialog]");
+    var hiddenDialogCloseBtn = navigatorRoot.querySelector("[data-role=ic-hidden-close]");
+    var hiddenDialogShowBtn = navigatorRoot.querySelector("[data-role=ic-hidden-show-selected]");
+    var hiddenDialogList = navigatorRoot.querySelector("[data-role=ic-hidden-list]");
 
     var texts = ' . json_encode($texts) . ';
     var ajaxBaseUrl = ' . json_encode($ajaxUrl) . ';
     var emptyCategoriesAjaxUrl = ' . json_encode($emptyCategoriesAjaxUrl) . ';
     var hideEmptyCategoriesAjaxUrl = ' . json_encode($hideEmptyCategoriesAjaxUrl) . ';
+    var hiddenWithProductsAjaxUrl = ' . json_encode($hiddenWithProductsAjaxUrl) . ';
+    var showHiddenCategoriesAjaxUrl = ' . json_encode($showHiddenCategoriesAjaxUrl) . ';
     var rootParentId = ' . (int) $defaultParentId . ';
     var stateStack = [];
 
-    function findParentListItem(element) {
+    function findParentListItem(element, listRoot) {
         var current = element;
-        while (current && current !== emptyDialogList) {
+        while (current && current !== listRoot) {
             if (current.tagName && current.tagName.toLowerCase() === "li") {
                 return current;
             }
@@ -843,6 +1023,25 @@ class InternautenCategories extends Module
 
         statusEl.textContent = message ? String(message) : "";
         statusEl.className = isError ? "ic-empty-dialog__status text-danger" : "ic-empty-dialog__status text-success";
+    }
+
+    function updateShowSelectedButtonState() {
+        if (!hiddenDialogShowBtn || !hiddenDialogList) {
+            return;
+        }
+
+        var checkedCount = hiddenDialogList.querySelectorAll("input[type=checkbox][data-role=ic-hidden-checkbox]:checked").length;
+        hiddenDialogShowBtn.disabled = checkedCount === 0;
+    }
+
+    function setHiddenDialogStatus(message, isError) {
+        var statusEl = navigatorRoot.querySelector("[data-role=ic-hidden-status]");
+        if (!statusEl) {
+            return;
+        }
+
+        statusEl.textContent = message ? String(message) : "";
+        statusEl.className = isError ? "ic-hidden-dialog__status text-danger" : "ic-hidden-dialog__status text-success";
     }
 
     function setSelected(id) {
@@ -965,6 +1164,40 @@ class InternautenCategories extends Module
         updateHideSelectedButtonState();
     }
 
+    function renderHiddenCategories(categories) {
+        if (!Array.isArray(categories) || !categories.length) {
+            hiddenDialogList.innerHTML = "<li>" + texts.hidden_categories_none + "</li>";
+            updateShowSelectedButtonState();
+            return;
+        }
+
+        hiddenDialogList.innerHTML = "";
+
+        categories.forEach(function (category) {
+            var row = document.createElement("li");
+            row.className = "ic-hidden-dialog__row";
+            row.setAttribute("data-role", "ic-hidden-row");
+
+            var rowLabel = document.createElement("label");
+            rowLabel.className = "ic-hidden-dialog__row-label";
+
+            var checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.setAttribute("data-role", "ic-hidden-checkbox");
+            checkbox.setAttribute("data-category-id", String(category.id));
+
+            var rowText = document.createElement("span");
+            rowText.textContent = category.name + " (#" + category.id + ")";
+
+            rowLabel.appendChild(checkbox);
+            rowLabel.appendChild(rowText);
+            row.appendChild(rowLabel);
+            hiddenDialogList.appendChild(row);
+        });
+
+        updateShowSelectedButtonState();
+    }
+
     function openEmptyCategoriesDialog() {
         if (!emptyDialog || !emptyDialogList) {
             return;
@@ -1008,6 +1241,49 @@ class InternautenCategories extends Module
         }
     }
 
+    function openHiddenWithProductsDialog() {
+        if (!hiddenDialog || !hiddenDialogList) {
+            return;
+        }
+
+        setHiddenDialogStatus("", false);
+        hiddenDialogList.innerHTML = "<li>" + texts.hidden_categories_loading + "</li>";
+
+        if (typeof hiddenDialog.showModal === "function") {
+            hiddenDialog.showModal();
+        } else {
+            hiddenDialog.setAttribute("open", "open");
+        }
+
+        fetch(hiddenWithProductsAjaxUrl, {
+            credentials: "same-origin"
+        }).then(function (response) {
+            return response.json();
+        }).then(function (data) {
+            if (!data || !data.ok) {
+                hiddenDialogList.innerHTML = "<li class=\"text-danger\">" + ((data && data.error) ? data.error : texts.hidden_categories_error) + "</li>";
+                return;
+            }
+
+            renderHiddenCategories(data.categories);
+        }).catch(function () {
+            hiddenDialogList.innerHTML = "<li class=\"text-danger\">" + texts.hidden_categories_error + "</li>";
+            updateShowSelectedButtonState();
+        });
+    }
+
+    function closeHiddenWithProductsDialog() {
+        if (!hiddenDialog) {
+            return;
+        }
+
+        if (typeof hiddenDialog.close === "function") {
+            hiddenDialog.close();
+        } else {
+            hiddenDialog.removeAttribute("open");
+        }
+    }
+
     backBtn.addEventListener("click", function () {
         if (!stateStack.length) {
             return;
@@ -1023,6 +1299,12 @@ class InternautenCategories extends Module
     if (showEmptyBtn) {
         showEmptyBtn.addEventListener("click", function () {
             openEmptyCategoriesDialog();
+        });
+    }
+
+    if (showHiddenWithProductsBtn) {
+        showHiddenWithProductsBtn.addEventListener("click", function () {
+            openHiddenWithProductsDialog();
         });
     }
 
@@ -1080,7 +1362,7 @@ class InternautenCategories extends Module
 
                 for (var hideIndex = 0; hideIndex < checkedBoxes.length; hideIndex++) {
                     var checked = checkedBoxes[hideIndex];
-                    var rowToHide = findParentListItem(checked);
+                    var rowToHide = findParentListItem(checked, emptyDialogList);
                     if (rowToHide) {
                         rowToHide.className += " ic-empty-dialog__row--hidden";
                     }
@@ -1096,6 +1378,76 @@ class InternautenCategories extends Module
         });
     }
 
+    if (hiddenDialogCloseBtn) {
+        hiddenDialogCloseBtn.addEventListener("click", function () {
+            closeHiddenWithProductsDialog();
+        });
+    }
+
+    if (hiddenDialogShowBtn) {
+        hiddenDialogShowBtn.addEventListener("click", function () {
+            if (!hiddenDialogList) {
+                return;
+            }
+
+            var checkedBoxes = hiddenDialogList.querySelectorAll("input[type=checkbox][data-role=ic-hidden-checkbox]:checked");
+            if (!checkedBoxes.length) {
+                updateShowSelectedButtonState();
+                return;
+            }
+
+            var selectedCategoryIds = [];
+            for (var index = 0; index < checkedBoxes.length; index++) {
+                var checkbox = checkedBoxes[index];
+                var categoryId = checkbox.getAttribute("data-category-id");
+                if (categoryId) {
+                    selectedCategoryIds.push(categoryId);
+                }
+            }
+
+            if (!selectedCategoryIds.length) {
+                setHiddenDialogStatus(texts.show_selected_error, true);
+                updateShowSelectedButtonState();
+                return;
+            }
+
+            hiddenDialogShowBtn.disabled = true;
+            setHiddenDialogStatus(texts.hiding_in_progress, false);
+
+            fetch(showHiddenCategoriesAjaxUrl, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+                },
+                body: "category_ids=" + encodeURIComponent(selectedCategoryIds.join(","))
+            }).then(function (response) {
+                return response.json();
+            }).then(function (data) {
+                if (!data || !data.ok) {
+                    setHiddenDialogStatus((data && data.error) ? data.error : texts.show_selected_error, true);
+                    updateShowSelectedButtonState();
+                    return;
+                }
+
+                for (var showIndex = 0; showIndex < checkedBoxes.length; showIndex++) {
+                    var checked = checkedBoxes[showIndex];
+                    var rowToHide = findParentListItem(checked, hiddenDialogList);
+                    if (rowToHide) {
+                        rowToHide.className += " ic-hidden-dialog__row--shown";
+                    }
+                    checked.checked = false;
+                }
+
+                setHiddenDialogStatus(data.message ? data.message : texts.show_selected_success, false);
+                updateShowSelectedButtonState();
+            }).catch(function () {
+                setHiddenDialogStatus(texts.show_selected_error, true);
+                updateShowSelectedButtonState();
+            });
+        });
+    }
+
     if (emptyDialogList) {
         emptyDialogList.addEventListener("change", function (event) {
             var target = event.target;
@@ -1105,10 +1457,26 @@ class InternautenCategories extends Module
         });
     }
 
+    if (hiddenDialogList) {
+        hiddenDialogList.addEventListener("change", function (event) {
+            var target = event.target;
+            if (target && target.getAttribute && target.getAttribute("data-role") === "ic-hidden-checkbox") {
+                updateShowSelectedButtonState();
+            }
+        });
+    }
+
     if (emptyDialog) {
         emptyDialog.addEventListener("cancel", function (event) {
             event.preventDefault();
             closeEmptyCategoriesDialog();
+        });
+    }
+
+    if (hiddenDialog) {
+        hiddenDialog.addEventListener("cancel", function (event) {
+            event.preventDefault();
+            closeHiddenWithProductsDialog();
         });
     }
 
@@ -1128,6 +1496,7 @@ class InternautenCategories extends Module
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
         <button type="button" class="btn btn-default" data-role="ic-back">' . Tools::safeOutput($texts['back']) . '</button>
         <button type="button" class="btn btn-default" data-role="ic-show-empty">' . Tools::safeOutput($texts['show_empty']) . '</button>
+        <button type="button" class="btn btn-default" data-role="ic-show-hidden-with-products">' . Tools::safeOutput($texts['show_hidden_with_products']) . '</button>
         <strong data-role="ic-path">' . Tools::safeOutput($texts['root']) . '</strong>
     </div>
     <div data-role="ic-selected" style="margin-bottom:8px;">' . Tools::safeOutput($texts['selected']) . Tools::safeOutput($selectedSuffix) . '</div>
@@ -1145,6 +1514,19 @@ class InternautenCategories extends Module
         <div class="ic-empty-dialog__actions">
             <button type="button" class="btn btn-default" data-role="ic-empty-hide-selected" disabled="disabled">' . Tools::safeOutput($texts['hide_selected']) . '</button>
             <button type="button" class="btn btn-default" data-role="ic-empty-close">' . Tools::safeOutput($texts['close']) . '</button>
+        </div>
+    </dialog>
+    <dialog data-role="ic-hidden-dialog" class="ic-hidden-dialog">
+        <div class="ic-hidden-dialog__header">
+            <strong>' . Tools::safeOutput($texts['hidden_dialog_title']) . '</strong>
+        </div>
+        <ul data-role="ic-hidden-list" class="list-unstyled ic-hidden-dialog__list">
+            <li>' . Tools::safeOutput($texts['hidden_categories_loading']) . '</li>
+        </ul>
+        <div data-role="ic-hidden-status" class="ic-hidden-dialog__status"></div>
+        <div class="ic-hidden-dialog__actions">
+            <button type="button" class="btn btn-default" data-role="ic-hidden-show-selected" disabled="disabled">' . Tools::safeOutput($texts['show_selected']) . '</button>
+            <button type="button" class="btn btn-default" data-role="ic-hidden-close">' . Tools::safeOutput($texts['close']) . '</button>
         </div>
     </dialog>
 </div>
@@ -1172,7 +1554,8 @@ class InternautenCategories extends Module
         margin-left: 8px;
     }
 
-    #ic-category-navigator .ic-empty-dialog {
+    #ic-category-navigator .ic-empty-dialog,
+    #ic-category-navigator .ic-hidden-dialog {
         width: min(700px, calc(100vw - 32px));
         max-height: 70vh;
         border: 1px solid #d6d4d4;
@@ -1180,15 +1563,18 @@ class InternautenCategories extends Module
         padding: 12px;
     }
 
-    #ic-category-navigator .ic-empty-dialog::backdrop {
+    #ic-category-navigator .ic-empty-dialog::backdrop,
+    #ic-category-navigator .ic-hidden-dialog::backdrop {
         background: rgba(0, 0, 0, 0.35);
     }
 
-    #ic-category-navigator .ic-empty-dialog__header {
+    #ic-category-navigator .ic-empty-dialog__header,
+    #ic-category-navigator .ic-hidden-dialog__header {
         margin-bottom: 10px;
     }
 
-    #ic-category-navigator .ic-empty-dialog__list {
+    #ic-category-navigator .ic-empty-dialog__list,
+    #ic-category-navigator .ic-hidden-dialog__list {
         max-height: 45vh;
         overflow: auto;
         border: 1px solid #d6d4d4;
@@ -1197,12 +1583,14 @@ class InternautenCategories extends Module
         margin: 0;
     }
 
-    #ic-category-navigator .ic-empty-dialog__list li {
+    #ic-category-navigator .ic-empty-dialog__list li,
+    #ic-category-navigator .ic-hidden-dialog__list li {
         padding: 3px 0;
         border-bottom: 1px solid #f1f1f1;
     }
 
-    #ic-category-navigator .ic-empty-dialog__row-label {
+    #ic-category-navigator .ic-empty-dialog__row-label,
+    #ic-category-navigator .ic-hidden-dialog__row-label {
         display: inline-flex;
         align-items: center;
         gap: 8px;
@@ -1215,18 +1603,25 @@ class InternautenCategories extends Module
         display: none !important;
     }
 
-    #ic-category-navigator .ic-empty-dialog__list li:last-child {
+    #ic-category-navigator .ic-hidden-dialog__row--shown {
+        display: none !important;
+    }
+
+    #ic-category-navigator .ic-empty-dialog__list li:last-child,
+    #ic-category-navigator .ic-hidden-dialog__list li:last-child {
         border-bottom: 0;
     }
 
-    #ic-category-navigator .ic-empty-dialog__actions {
+    #ic-category-navigator .ic-empty-dialog__actions,
+    #ic-category-navigator .ic-hidden-dialog__actions {
         display: flex;
         justify-content: flex-end;
         gap: 8px;
         margin-top: 10px;
     }
 
-    #ic-category-navigator .ic-empty-dialog__status {
+    #ic-category-navigator .ic-empty-dialog__status,
+    #ic-category-navigator .ic-hidden-dialog__status {
         min-height: 20px;
         margin-top: 8px;
     }
