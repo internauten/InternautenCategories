@@ -1,5 +1,10 @@
 # Internauten Categories Module
 
+[![Sponsor](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-ea4aaa?logo=githubsponsors)](https://github.com/sponsors/internauten)
+[![Stars](https://img.shields.io/github/stars/internauten/InternautenCategories?style=social)](https://github.com/internauten/InternautenCategories/stargazers)
+[![Release](https://img.shields.io/github/v/release/internauten/InternautenCategories)](https://github.com/internauten/InternautenCategories/releases)
+[![License](https://img.shields.io/github/license/internauten/InternautenCategories)](https://github.com/internauten/InternautenCategories/blob/main/LICENSE)
+
 Dieses Repository enthaelt ein PrestaShop-Modul, das Unterkategorien innerhalb einer Kategorie alphabetisch sortiert.
 
 ## Modulordner
