@@ -41,6 +41,13 @@ $_MODULE['<{internautencategories}prestashop>internautencategories_d607a0e1e53f8
 $_MODULE['<{internautencategories}prestashop>internautencategories_4b46c23a6feda3df604cc105890b2f19'] = 'Updating categories...';
 $_MODULE['<{internautencategories}prestashop>internautencategories_669249173b857698bade4575d8fd22cd'] = 'Selected categories were set to hidden.';
 $_MODULE['<{internautencategories}prestashop>internautencategories_619069282e13bfe32b038eb165be570f'] = 'Selected categories could not be updated.';
+$_MODULE['<{internautencategories}prestashop>internautencategories_e23657ea240a25cc2b4e37aa9709287f'] = 'Show hidden categories with products';
+$_MODULE['<{internautencategories}prestashop>internautencategories_17507326cb2311d5eb258fe7246eaa3d'] = 'Hidden categories with products';
+$_MODULE['<{internautencategories}prestashop>internautencategories_b80d755027fd749089b619f7b0c99608'] = 'Loading hidden categories...';
+$_MODULE['<{internautencategories}prestashop>internautencategories_125a6b70fdc62f049f0eda0c8a773d1c'] = 'No hidden categories with products found.';
+$_MODULE['<{internautencategories}prestashop>internautencategories_69d47a999d75d0501f9157d75c45c95c'] = 'Hidden categories could not be loaded.';
+$_MODULE['<{internautencategories}prestashop>internautencategories_f621d3dd505ee8ec4cb9d2f404095790'] = 'Show selected categories in this shop';
+$_MODULE['<{internautencategories}prestashop>internautencategories_14e251341646a0af9a86750543bf857b'] = 'Selected categories were set to visible.';
 $_MODULE['<{internautencategories}prestashop>internautencategories_0032a0cfed7a99f0fd01957765fbaab3'] = 'No categories selected.';
 $_MODULE['<{internautencategories}prestashop>internautencategories_d54e642c09b27c65b259d0f8e98387c0'] = 'Subcategory Sorting';
 $_MODULE['<{internautencategories}prestashop>internautencategories_051368bddd5091528250237f1a957d21'] = 'Parent category ID (optional)';

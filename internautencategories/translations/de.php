@@ -41,6 +41,13 @@ $_MODULE['<{internautencategories}prestashop>internautencategories_d607a0e1e53f8
 $_MODULE['<{internautencategories}prestashop>internautencategories_4b46c23a6feda3df604cc105890b2f19'] = 'Kategorien werden aktualisiert...';
 $_MODULE['<{internautencategories}prestashop>internautencategories_669249173b857698bade4575d8fd22cd'] = 'Ausgewaehlte Kategorien wurden auf ausgeblendet gesetzt.';
 $_MODULE['<{internautencategories}prestashop>internautencategories_619069282e13bfe32b038eb165be570f'] = 'Ausgewaehlte Kategorien konnten nicht aktualisiert werden.';
+$_MODULE['<{internautencategories}prestashop>internautencategories_e23657ea240a25cc2b4e37aa9709287f'] = 'Versteckte Kategorien mit Produkten anzeigen';
+$_MODULE['<{internautencategories}prestashop>internautencategories_17507326cb2311d5eb258fe7246eaa3d'] = 'Versteckte Kategorien mit Produkten';
+$_MODULE['<{internautencategories}prestashop>internautencategories_b80d755027fd749089b619f7b0c99608'] = 'Versteckte Kategorien werden geladen...';
+$_MODULE['<{internautencategories}prestashop>internautencategories_125a6b70fdc62f049f0eda0c8a773d1c'] = 'Keine versteckten Kategorien mit Produkten gefunden.';
+$_MODULE['<{internautencategories}prestashop>internautencategories_69d47a999d75d0501f9157d75c45c95c'] = 'Versteckte Kategorien konnten nicht geladen werden.';
+$_MODULE['<{internautencategories}prestashop>internautencategories_f621d3dd505ee8ec4cb9d2f404095790'] = 'Ausgewaehlte Kategorien in diesem Shop einblenden';
+$_MODULE['<{internautencategories}prestashop>internautencategories_14e251341646a0af9a86750543bf857b'] = 'Ausgewaehlte Kategorien wurden auf sichtbar gesetzt.';
 $_MODULE['<{internautencategories}prestashop>internautencategories_0032a0cfed7a99f0fd01957765fbaab3'] = 'Keine Kategorien ausgewaehlt.';
 $_MODULE['<{internautencategories}prestashop>internautencategories_d54e642c09b27c65b259d0f8e98387c0'] = 'Unterkategorie-Sortierung';
 $_MODULE['<{internautencategories}prestashop>internautencategories_051368bddd5091528250237f1a957d21'] = 'Elternkategorie-ID (optional)';
