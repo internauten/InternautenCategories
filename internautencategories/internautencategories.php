@@ -24,7 +24,7 @@ class InternautenCategories extends Module
     {
         $this->name = 'internautencategories';
         $this->tab = 'administration';
-        $this->version = '0.0.4';
+        $this->version = '0.0.5';
         $this->author = 'die.internauten.ch';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -345,10 +345,15 @@ class InternautenCategories extends Module
                     AND NOT EXISTS (
                         SELECT 1
                         FROM `' . _DB_PREFIX_ . 'category_product` cp
+                        INNER JOIN `' . _DB_PREFIX_ . 'product_shop` ps
+                            ON ps.id_product = cp.id_product
+                            AND ps.id_shop = ' . (int) $shopId . '
                         INNER JOIN `' . _DB_PREFIX_ . 'stock_available` sa
                             ON sa.id_product = cp.id_product
                             AND sa.id_product_attribute = 0
                         WHERE cp.id_category = c.id_category
+                            AND ps.active = 1
+                            AND ps.visibility IN ("both", "catalog", "search")
                             AND sa.quantity > 0
                             AND (
                                 sa.id_shop = ' . (int) $shopId . '
@@ -392,10 +397,15 @@ class InternautenCategories extends Module
                     AND EXISTS (
                         SELECT 1
                         FROM `' . _DB_PREFIX_ . 'category_product` cp
+                        INNER JOIN `' . _DB_PREFIX_ . 'product_shop` ps
+                            ON ps.id_product = cp.id_product
+                            AND ps.id_shop = ' . (int) $shopId . '
                         INNER JOIN `' . _DB_PREFIX_ . 'stock_available` sa
                             ON sa.id_product = cp.id_product
                             AND sa.id_product_attribute = 0
                         WHERE cp.id_category = c.id_category
+                            AND ps.active = 1
+                            AND ps.visibility IN ("both", "catalog", "search")
                             AND sa.quantity > 0
                             AND (
                                 sa.id_shop = ' . (int) $shopId . '
