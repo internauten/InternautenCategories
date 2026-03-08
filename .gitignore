@@ -34,3 +34,4 @@ coverage/
 # PrestaShop local artifacts (when testing module in a local shop copy)
 **/var/cache/
 **/var/logs/
+internautencategories/config.xml
