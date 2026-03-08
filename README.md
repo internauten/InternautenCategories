@@ -85,6 +85,26 @@ Oder bash auf container im VSCode öffnen.
 
 Das bereitstellen der Kopie einer VM ist im [README des Repositoris InternautenB2BOffer](https://github.com/internauten/InternautenB2BOffer?tab=readme-ov-file#development) beschrieben.
 
+### Get Module and install it
+
+1. git clone yor fork of this repo
+    ```bash
+    cd ~ 
+    git clone https://github.com/yourgithub/InternautenCategories.git
+    ```
+2. set owner, goup and rights
+    ```bash
+    sudo chown -R www-data:www-data ~/InternautenCategories/internautencategories
+    ```
+3. Create symlink and set group:owner
+    ```bash
+    sudo ln -s ~/InternautenCategories/internautencategories /var/www/prestashop/modules/internautencategories
+    sudo chown -h www-data:www-data ~/InternautenCategories/internautencategories
+    sudo chown -h www-data:www-data /var/www/prestashop/modules/internautencategories
+    ```
+4. Activate and configure Module in Prestashop   
+    In Prestashop backend go to Module Manager / not installed Modules and install the module. 
+
 ### Nach Änderungen immer cache leeren
 
 ```bash
