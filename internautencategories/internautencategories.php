@@ -6,6 +6,7 @@ if (!defined('_PS_VERSION_')) {
 
 class InternautenCategories extends Module
 {
+    private const AJAX_ACTION_CATEGORY_CHILDREN = 'icGetCategoryChildren';
     private const CONFIG_CATEGORY_ID = 'IC_SORT_PARENT_CATEGORY_ID';
     private const CONFIG_LANGUAGE_ID = 'IC_SORT_PRIMARY_LANGUAGE_ID';
     private const CONFIG_SORT_ALL_LANGUAGES = 'IC_SORT_ALL_LANGUAGES';
@@ -60,6 +61,12 @@ class InternautenCategories extends Module
 
     public function getContent()
     {
+        if (Tools::getValue('ajax') === '1' && Tools::getValue('action') === self::AJAX_ACTION_CATEGORY_CHILDREN) {
+            $this->renderCategoryNavigatorAjax();
+
+            return '';
+        }
+
         $output = '';
 
         if (Tools::isSubmit('submitInternautenCategoriesConfig')) {
@@ -80,6 +87,35 @@ class InternautenCategories extends Module
         }
 
         return $output . $this->renderForm();
+    }
+
+    private function renderCategoryNavigatorAjax()
+    {
+        $shopId = (int) $this->context->shop->id;
+        $languageId = (int) $this->context->language->id;
+        $defaultParentId = (int) Configuration::get('PS_HOME_CATEGORY');
+        $parentId = (int) Tools::getValue('parent_id', $defaultParentId);
+
+        if ($parentId <= 0 || !Category::categoryExists($parentId, $shopId)) {
+            $this->sendCategoryNavigatorJson([
+                'ok' => false,
+                'error' => $this->l('Requested category does not exist in this shop.'),
+            ]);
+        }
+
+        $children = $this->getCategoryNavigatorChildren($parentId, $languageId, $shopId);
+
+        $this->sendCategoryNavigatorJson([
+            'ok' => true,
+            'parent_id' => $parentId,
+            'children' => $children,
+        ]);
+    }
+
+    private function sendCategoryNavigatorJson(array $payload)
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        die((string) json_encode($payload));
     }
 
     private function saveConfiguration()
@@ -534,6 +570,233 @@ class InternautenCategories extends Module
         return $maxCount !== false ? (int) $maxCount : 0;
     }
 
+    private function getCategoryNavigatorChildren($parentId, $languageId, $shopId)
+    {
+        $sql = 'SELECT c.id_category, cl.name,
+                    (
+                        SELECT COUNT(*)
+                        FROM `' . _DB_PREFIX_ . 'category` c2
+                        INNER JOIN `' . _DB_PREFIX_ . 'category_shop` cs2
+                            ON cs2.id_category = c2.id_category
+                            AND cs2.id_shop = ' . (int) $shopId . '
+                        WHERE c2.id_parent = c.id_category
+                    ) AS child_count
+                FROM `' . _DB_PREFIX_ . 'category` c
+                INNER JOIN `' . _DB_PREFIX_ . 'category_shop` cs
+                    ON cs.id_category = c.id_category
+                    AND cs.id_shop = ' . (int) $shopId . '
+                INNER JOIN `' . _DB_PREFIX_ . 'category_lang` cl
+                    ON cl.id_category = c.id_category
+                    AND cl.id_lang = ' . (int) $languageId . '
+                    AND cl.id_shop = ' . (int) $shopId . '
+                WHERE c.id_parent = ' . (int) $parentId . '
+                ORDER BY cl.name ASC';
+
+        $rows = Db::getInstance()->executeS($sql);
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $children = [];
+        foreach ($rows as $row) {
+            $children[] = [
+                'id' => (int) $row['id_category'],
+                'name' => (string) $row['name'],
+                'has_children' => ((int) $row['child_count']) > 0,
+            ];
+        }
+
+        return $children;
+    }
+
+    private function renderCategoryNavigatorPanel()
+    {
+        $defaultParentId = (int) Configuration::get('PS_HOME_CATEGORY');
+        $configuredParentRaw = trim((string) Configuration::get(self::CONFIG_CATEGORY_ID));
+        $selectedSuffix = $configuredParentRaw !== '' ? ' ' . (int) $configuredParentRaw : '';
+        $ajaxUrl = AdminController::$currentIndex
+            . '&configure=' . $this->name
+            . '&token=' . Tools::getAdminTokenLite('AdminModules')
+            . '&ajax=1&action=' . self::AJAX_ACTION_CATEGORY_CHILDREN;
+
+        $texts = [
+            'title' => $this->l('Category navigator'),
+            'description' => $this->l('Click through categories to choose a parent category ID. Clicking a category sets the ID and opens its subcategories.'),
+            'back' => $this->l('Back'),
+            'root' => $this->l('Top level'),
+            'selected' => $this->l('Selected parent ID:'),
+            'loading' => $this->l('Loading categories...'),
+            'empty' => $this->l('No subcategories available.'),
+            'error' => $this->l('Categories could not be loaded.'),
+            'open' => $this->l('Open'),
+            'leaf' => $this->l('No subcategories'),
+        ];
+
+        $script = '<script type="text/javascript">
+(function () {
+    var navigatorRoot = document.getElementById("ic-category-navigator");
+    if (!navigatorRoot) {
+        return;
+    }
+
+    var configInput = document.getElementById("' . pSQL(self::CONFIG_CATEGORY_ID) . '");
+    var listEl = navigatorRoot.querySelector("[data-role=ic-list]");
+    var pathEl = navigatorRoot.querySelector("[data-role=ic-path]");
+    var selectedEl = navigatorRoot.querySelector("[data-role=ic-selected]");
+    var backBtn = navigatorRoot.querySelector("[data-role=ic-back]");
+
+    var texts = ' . json_encode($texts) . ';
+    var ajaxBaseUrl = ' . json_encode($ajaxUrl) . ';
+    var rootParentId = ' . (int) $defaultParentId . ';
+    var stateStack = [];
+
+    function setSelected(id) {
+        if (!configInput) {
+            return;
+        }
+
+        configInput.value = String(id);
+        selectedEl.textContent = texts.selected + " " + id;
+    }
+
+    function setLoading() {
+        listEl.innerHTML = "<li>" + texts.loading + "</li>";
+    }
+
+    function setError(message) {
+        listEl.innerHTML = "<li class=\"text-danger\">" + message + "</li>";
+    }
+
+    function updatePath() {
+        if (!stateStack.length) {
+            pathEl.textContent = texts.root;
+            backBtn.disabled = true;
+            return;
+        }
+
+        var names = stateStack.map(function (entry) { return entry.name; });
+        pathEl.textContent = texts.root + " / " + names.join(" / ");
+        backBtn.disabled = stateStack.length === 0;
+    }
+
+    function renderChildren(children) {
+        if (!Array.isArray(children) || !children.length) {
+            listEl.innerHTML = "<li>" + texts.empty + "</li>";
+            return;
+        }
+
+        listEl.innerHTML = "";
+
+        children.forEach(function (child) {
+            var row = document.createElement("li");
+            row.className = "ic-category-item";
+
+            var label = document.createElement("button");
+            label.type = "button";
+            label.className = "btn btn-link ic-category-select";
+            label.textContent = child.name + " (#" + child.id + ")";
+            label.addEventListener("click", function () {
+                setSelected(child.id);
+
+                if (!child.has_children) {
+                    return;
+                }
+
+                stateStack.push({ id: child.id, name: child.name });
+                updatePath();
+                loadChildren(child.id);
+            });
+            row.appendChild(label);
+
+            var suffix = document.createElement("span");
+            suffix.className = "ic-category-suffix";
+            suffix.textContent = child.has_children ? texts.open : texts.leaf;
+            row.appendChild(suffix);
+
+            listEl.appendChild(row);
+        });
+    }
+
+    function loadChildren(parentId) {
+        setLoading();
+
+        fetch(ajaxBaseUrl + "&parent_id=" + encodeURIComponent(parentId), {
+            credentials: "same-origin"
+        }).then(function (response) {
+            return response.json();
+        }).then(function (data) {
+            if (!data || !data.ok) {
+                setError((data && data.error) ? data.error : texts.error);
+                return;
+            }
+
+            renderChildren(data.children);
+        }).catch(function () {
+            setError(texts.error);
+        });
+    }
+
+    backBtn.addEventListener("click", function () {
+        if (!stateStack.length) {
+            return;
+        }
+
+        stateStack.pop();
+        updatePath();
+
+        var parentId = stateStack.length ? stateStack[stateStack.length - 1].id : rootParentId;
+        loadChildren(parentId);
+    });
+
+    if (configInput && configInput.value) {
+        selectedEl.textContent = texts.selected + " " + configInput.value;
+    }
+
+    updatePath();
+    loadChildren(rootParentId);
+})();
+</script>';
+
+        return '
+<div id="ic-category-navigator" class="panel" style="margin-top:12px;">
+    <h3><i class="icon-sitemap"></i> ' . Tools::safeOutput($texts['title']) . '</h3>
+    <p>' . Tools::safeOutput($texts['description']) . '</p>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+        <button type="button" class="btn btn-default" data-role="ic-back">' . Tools::safeOutput($texts['back']) . '</button>
+        <strong data-role="ic-path">' . Tools::safeOutput($texts['root']) . '</strong>
+    </div>
+    <div data-role="ic-selected" style="margin-bottom:8px;">' . Tools::safeOutput($texts['selected']) . Tools::safeOutput($selectedSuffix) . '</div>
+    <ul data-role="ic-list" class="list-unstyled" style="margin:0;padding:0;display:flex;flex-direction:column;gap:6px;">
+        <li>' . Tools::safeOutput($texts['loading']) . '</li>
+    </ul>
+</div>
+<style>
+    #ic-category-navigator .ic-category-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border: 1px solid #d6d4d4;
+        border-radius: 4px;
+        background: #fff;
+        padding: 4px 8px;
+    }
+
+    #ic-category-navigator .ic-category-select {
+        padding-left: 0;
+        white-space: normal;
+        text-align: left;
+        flex: 1;
+    }
+
+    #ic-category-navigator .ic-category-suffix {
+        font-size: 12px;
+        color: #666;
+        margin-left: 8px;
+    }
+</style>
+' . $script;
+    }
+
     private function getRecommendedBatchRange($estimatedChildren)
     {
         $estimatedChildren = (int) $estimatedChildren;
@@ -673,7 +936,7 @@ class InternautenCategories extends Module
             self::CONFIG_BATCH_SIZE => (int) $this->getConfiguredBatchSize(),
         ];
 
-        return $helper->generateForm([$fieldsForm]);
+        return $helper->generateForm([$fieldsForm]) . $this->renderCategoryNavigatorPanel();
     }
 
     private function buildLanguageOptions(array $languages)

@@ -66,3 +66,9 @@ Use a dry-run to preview the tag command without creating or pushing anything:
 ```bash
 ./scripts/tag-from-module-version.sh --dry-run
 ```
+
+## License
+
+This project is licensed under the MIT License. See details [`LICENSE`](LICENSE).
+
+Copyright (c) 2026 die.internauten.ch GmbH
