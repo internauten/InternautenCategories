@@ -318,6 +318,7 @@ class InternautenCategories extends Module
 
     private function getEmptyCategoriesForDialog($shopId, $languageId)
     {
+        $shopGroupId = (int) $this->context->shop->id_shop_group;
         $categoryShopHasActiveColumn = $this->categoryShopHasActiveColumn();
         $categoryShopActiveFilter = $categoryShopHasActiveColumn ? "\n                    AND cs.active = 1" : '';
 
@@ -344,7 +345,15 @@ class InternautenCategories extends Module
                     AND NOT EXISTS (
                         SELECT 1
                         FROM `' . _DB_PREFIX_ . 'category_product` cp
+                        INNER JOIN `' . _DB_PREFIX_ . 'stock_available` sa
+                            ON sa.id_product = cp.id_product
+                            AND sa.id_product_attribute = 0
                         WHERE cp.id_category = c.id_category
+                            AND sa.quantity > 0
+                            AND (
+                                sa.id_shop = ' . (int) $shopId . '
+                                OR (sa.id_shop = 0 AND sa.id_shop_group = ' . (int) $shopGroupId . ')
+                            )
                     )
                 ORDER BY cl.name ASC';
 
@@ -363,6 +372,7 @@ class InternautenCategories extends Module
 
     private function getHiddenCategoriesWithProductsForDialog($shopId, $languageId)
     {
+        $shopGroupId = (int) $this->context->shop->id_shop_group;
         $categoryShopHasActiveColumn = $this->categoryShopHasActiveColumn();
         $hiddenFilter = $categoryShopHasActiveColumn
             ? '(c.active = 0 OR cs.active = 0)'
@@ -382,7 +392,15 @@ class InternautenCategories extends Module
                     AND EXISTS (
                         SELECT 1
                         FROM `' . _DB_PREFIX_ . 'category_product` cp
+                        INNER JOIN `' . _DB_PREFIX_ . 'stock_available` sa
+                            ON sa.id_product = cp.id_product
+                            AND sa.id_product_attribute = 0
                         WHERE cp.id_category = c.id_category
+                            AND sa.quantity > 0
+                            AND (
+                                sa.id_shop = ' . (int) $shopId . '
+                                OR (sa.id_shop = 0 AND sa.id_shop_group = ' . (int) $shopGroupId . ')
+                            )
                     )
                 ORDER BY cl.name ASC';
 
@@ -942,21 +960,21 @@ class InternautenCategories extends Module
             'error' => $this->l('Categories could not be loaded.'),
             'open' => $this->l('Open'),
             'leaf' => $this->l('No subcategories'),
-            'show_empty' => $this->l('Show empty categories'),
-            'empty_dialog_title' => $this->l('Empty categories (no subcategories, no products)'),
+            'show_empty' => $this->l('Show categories without in-stock products'),
+            'empty_dialog_title' => $this->l('Categories without stock (no subcategories, no in-stock products)'),
             'close' => $this->l('Close'),
-            'empty_categories_loading' => $this->l('Loading empty categories...'),
-            'empty_categories_none' => $this->l('No empty categories found.'),
-            'empty_categories_error' => $this->l('Empty categories could not be loaded.'),
+            'empty_categories_loading' => $this->l('Loading categories without stock...'),
+            'empty_categories_none' => $this->l('No categories without stock found.'),
+            'empty_categories_error' => $this->l('Categories without stock could not be loaded.'),
             'hide_selected' => $this->l('Hide selected categories in this shop'),
             'hiding_in_progress' => $this->l('Updating categories...'),
             'hide_selected_success' => $this->l('Selected categories were set to hidden.'),
             'hide_selected_error' => $this->l('Selected categories could not be updated.'),
-            'show_hidden_with_products' => $this->l('Show hidden categories with products'),
-            'hidden_dialog_title' => $this->l('Hidden categories with products'),
-            'hidden_categories_loading' => $this->l('Loading hidden categories...'),
-            'hidden_categories_none' => $this->l('No hidden categories with products found.'),
-            'hidden_categories_error' => $this->l('Hidden categories could not be loaded.'),
+            'show_hidden_with_products' => $this->l('Show hidden categories with in-stock products'),
+            'hidden_dialog_title' => $this->l('Hidden categories with in-stock products'),
+            'hidden_categories_loading' => $this->l('Loading hidden categories with stock...'),
+            'hidden_categories_none' => $this->l('No hidden categories with in-stock products found.'),
+            'hidden_categories_error' => $this->l('Hidden categories with in-stock products could not be loaded.'),
             'show_selected' => $this->l('Show selected categories in this shop'),
             'show_selected_success' => $this->l('Selected categories were set to visible.'),
             'show_selected_error' => $this->l('Selected categories could not be updated.'),
