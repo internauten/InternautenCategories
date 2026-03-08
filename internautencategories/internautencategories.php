@@ -7,6 +7,7 @@ if (!defined('_PS_VERSION_')) {
 class InternautenCategories extends Module
 {
     private const AJAX_ACTION_CATEGORY_CHILDREN = 'icGetCategoryChildren';
+    private const AJAX_ACTION_EMPTY_CATEGORIES = 'icGetEmptyCategories';
     private const CONFIG_CATEGORY_ID = 'IC_SORT_PARENT_CATEGORY_ID';
     private const CONFIG_LANGUAGE_ID = 'IC_SORT_PRIMARY_LANGUAGE_ID';
     private const CONFIG_SORT_ALL_LANGUAGES = 'IC_SORT_ALL_LANGUAGES';
@@ -20,7 +21,7 @@ class InternautenCategories extends Module
     {
         $this->name = 'internautencategories';
         $this->tab = 'administration';
-        $this->version = '0.0.3';
+        $this->version = '0.0.4';
         $this->author = 'die.internauten.ch';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -61,10 +62,20 @@ class InternautenCategories extends Module
 
     public function getContent()
     {
-        if (Tools::getValue('ajax') === '1' && Tools::getValue('action') === self::AJAX_ACTION_CATEGORY_CHILDREN) {
-            $this->renderCategoryNavigatorAjax();
+        if (Tools::getValue('ajax') === '1') {
+            $action = (string) Tools::getValue('action');
 
-            return '';
+            if ($action === self::AJAX_ACTION_CATEGORY_CHILDREN) {
+                $this->renderCategoryNavigatorAjax();
+
+                return '';
+            }
+
+            if ($action === self::AJAX_ACTION_EMPTY_CATEGORIES) {
+                $this->renderEmptyCategoriesAjax();
+
+                return '';
+            }
         }
 
         $output = '';
@@ -116,6 +127,59 @@ class InternautenCategories extends Module
     {
         header('Content-Type: application/json; charset=utf-8');
         die((string) json_encode($payload));
+    }
+
+    private function renderEmptyCategoriesAjax()
+    {
+        $shopId = (int) $this->context->shop->id;
+        $languageId = (int) $this->context->language->id;
+
+        $emptyCategories = $this->getEmptyCategoriesForDialog($shopId, $languageId);
+
+        $this->sendCategoryNavigatorJson([
+            'ok' => true,
+            'categories' => $emptyCategories,
+        ]);
+    }
+
+    private function getEmptyCategoriesForDialog($shopId, $languageId)
+    {
+        $sql = 'SELECT c.id_category, cl.name
+                FROM `' . _DB_PREFIX_ . 'category` c
+                INNER JOIN `' . _DB_PREFIX_ . 'category_shop` cs
+                    ON cs.id_category = c.id_category
+                    AND cs.id_shop = ' . (int) $shopId . '
+                INNER JOIN `' . _DB_PREFIX_ . 'category_lang` cl
+                    ON cl.id_category = c.id_category
+                    AND cl.id_lang = ' . (int) $languageId . '
+                    AND cl.id_shop = ' . (int) $shopId . '
+                WHERE c.id_parent > 0
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM `' . _DB_PREFIX_ . 'category` c2
+                        INNER JOIN `' . _DB_PREFIX_ . 'category_shop` cs2
+                            ON cs2.id_category = c2.id_category
+                            AND cs2.id_shop = ' . (int) $shopId . '
+                        WHERE c2.id_parent = c.id_category
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM `' . _DB_PREFIX_ . 'category_product` cp
+                        WHERE cp.id_category = c.id_category
+                    )
+                ORDER BY cl.name ASC';
+
+        $rows = Db::getInstance()->executeS($sql);
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        return array_map(static function ($row) {
+            return [
+                'id' => (int) $row['id_category'],
+                'name' => (string) $row['name'],
+            ];
+        }, $rows);
     }
 
     private function saveConfiguration()
@@ -618,6 +682,10 @@ class InternautenCategories extends Module
             . '&configure=' . $this->name
             . '&token=' . Tools::getAdminTokenLite('AdminModules')
             . '&ajax=1&action=' . self::AJAX_ACTION_CATEGORY_CHILDREN;
+        $emptyCategoriesAjaxUrl = AdminController::$currentIndex
+            . '&configure=' . $this->name
+            . '&token=' . Tools::getAdminTokenLite('AdminModules')
+            . '&ajax=1&action=' . self::AJAX_ACTION_EMPTY_CATEGORIES;
 
         $texts = [
             'title' => $this->l('Category navigator'),
@@ -630,6 +698,12 @@ class InternautenCategories extends Module
             'error' => $this->l('Categories could not be loaded.'),
             'open' => $this->l('Open'),
             'leaf' => $this->l('No subcategories'),
+            'show_empty' => $this->l('Show empty categories'),
+            'empty_dialog_title' => $this->l('Empty categories (no subcategories, no products)'),
+            'close' => $this->l('Close'),
+            'empty_categories_loading' => $this->l('Loading empty categories...'),
+            'empty_categories_none' => $this->l('No empty categories found.'),
+            'empty_categories_error' => $this->l('Empty categories could not be loaded.'),
         ];
 
         $script = '<script type="text/javascript">
@@ -644,9 +718,14 @@ class InternautenCategories extends Module
     var pathEl = navigatorRoot.querySelector("[data-role=ic-path]");
     var selectedEl = navigatorRoot.querySelector("[data-role=ic-selected]");
     var backBtn = navigatorRoot.querySelector("[data-role=ic-back]");
+    var showEmptyBtn = navigatorRoot.querySelector("[data-role=ic-show-empty]");
+    var emptyDialog = navigatorRoot.querySelector("[data-role=ic-empty-dialog]");
+    var emptyDialogCloseBtn = navigatorRoot.querySelector("[data-role=ic-empty-close]");
+    var emptyDialogList = navigatorRoot.querySelector("[data-role=ic-empty-list]");
 
     var texts = ' . json_encode($texts) . ';
     var ajaxBaseUrl = ' . json_encode($ajaxUrl) . ';
+    var emptyCategoriesAjaxUrl = ' . json_encode($emptyCategoriesAjaxUrl) . ';
     var rootParentId = ' . (int) $defaultParentId . ';
     var stateStack = [];
 
@@ -736,6 +815,62 @@ class InternautenCategories extends Module
         });
     }
 
+    function renderEmptyCategories(categories) {
+        if (!Array.isArray(categories) || !categories.length) {
+            emptyDialogList.innerHTML = "<li>" + texts.empty_categories_none + "</li>";
+            return;
+        }
+
+        emptyDialogList.innerHTML = "";
+
+        categories.forEach(function (category) {
+            var row = document.createElement("li");
+            row.textContent = category.name + " (#" + category.id + ")";
+            emptyDialogList.appendChild(row);
+        });
+    }
+
+    function openEmptyCategoriesDialog() {
+        if (!emptyDialog || !emptyDialogList) {
+            return;
+        }
+
+        emptyDialogList.innerHTML = "<li>" + texts.empty_categories_loading + "</li>";
+
+        if (typeof emptyDialog.showModal === "function") {
+            emptyDialog.showModal();
+        } else {
+            emptyDialog.setAttribute("open", "open");
+        }
+
+        fetch(emptyCategoriesAjaxUrl, {
+            credentials: "same-origin"
+        }).then(function (response) {
+            return response.json();
+        }).then(function (data) {
+            if (!data || !data.ok) {
+                emptyDialogList.innerHTML = "<li class=\"text-danger\">" + ((data && data.error) ? data.error : texts.empty_categories_error) + "</li>";
+                return;
+            }
+
+            renderEmptyCategories(data.categories);
+        }).catch(function () {
+            emptyDialogList.innerHTML = "<li class=\"text-danger\">" + texts.empty_categories_error + "</li>";
+        });
+    }
+
+    function closeEmptyCategoriesDialog() {
+        if (!emptyDialog) {
+            return;
+        }
+
+        if (typeof emptyDialog.close === "function") {
+            emptyDialog.close();
+        } else {
+            emptyDialog.removeAttribute("open");
+        }
+    }
+
     backBtn.addEventListener("click", function () {
         if (!stateStack.length) {
             return;
@@ -747,6 +882,25 @@ class InternautenCategories extends Module
         var parentId = stateStack.length ? stateStack[stateStack.length - 1].id : rootParentId;
         loadChildren(parentId);
     });
+
+    if (showEmptyBtn) {
+        showEmptyBtn.addEventListener("click", function () {
+            openEmptyCategoriesDialog();
+        });
+    }
+
+    if (emptyDialogCloseBtn) {
+        emptyDialogCloseBtn.addEventListener("click", function () {
+            closeEmptyCategoriesDialog();
+        });
+    }
+
+    if (emptyDialog) {
+        emptyDialog.addEventListener("cancel", function (event) {
+            event.preventDefault();
+            closeEmptyCategoriesDialog();
+        });
+    }
 
     if (configInput && configInput.value) {
         selectedEl.textContent = texts.selected + " " + configInput.value;
@@ -763,12 +917,24 @@ class InternautenCategories extends Module
     <p>' . Tools::safeOutput($texts['description']) . '</p>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
         <button type="button" class="btn btn-default" data-role="ic-back">' . Tools::safeOutput($texts['back']) . '</button>
+        <button type="button" class="btn btn-default" data-role="ic-show-empty">' . Tools::safeOutput($texts['show_empty']) . '</button>
         <strong data-role="ic-path">' . Tools::safeOutput($texts['root']) . '</strong>
     </div>
     <div data-role="ic-selected" style="margin-bottom:8px;">' . Tools::safeOutput($texts['selected']) . Tools::safeOutput($selectedSuffix) . '</div>
     <ul data-role="ic-list" class="list-unstyled" style="margin:0;padding:0;display:flex;flex-direction:column;gap:6px;">
         <li>' . Tools::safeOutput($texts['loading']) . '</li>
     </ul>
+    <dialog data-role="ic-empty-dialog" class="ic-empty-dialog">
+        <div class="ic-empty-dialog__header">
+            <strong>' . Tools::safeOutput($texts['empty_dialog_title']) . '</strong>
+        </div>
+        <ul data-role="ic-empty-list" class="list-unstyled ic-empty-dialog__list">
+            <li>' . Tools::safeOutput($texts['empty_categories_loading']) . '</li>
+        </ul>
+        <div class="ic-empty-dialog__actions">
+            <button type="button" class="btn btn-default" data-role="ic-empty-close">' . Tools::safeOutput($texts['close']) . '</button>
+        </div>
+    </dialog>
 </div>
 <style>
     #ic-category-navigator .ic-category-item {
@@ -792,6 +958,46 @@ class InternautenCategories extends Module
         font-size: 12px;
         color: #666;
         margin-left: 8px;
+    }
+
+    #ic-category-navigator .ic-empty-dialog {
+        width: min(700px, calc(100vw - 32px));
+        max-height: 70vh;
+        border: 1px solid #d6d4d4;
+        border-radius: 4px;
+        padding: 12px;
+    }
+
+    #ic-category-navigator .ic-empty-dialog::backdrop {
+        background: rgba(0, 0, 0, 0.35);
+    }
+
+    #ic-category-navigator .ic-empty-dialog__header {
+        margin-bottom: 10px;
+    }
+
+    #ic-category-navigator .ic-empty-dialog__list {
+        max-height: 45vh;
+        overflow: auto;
+        border: 1px solid #d6d4d4;
+        border-radius: 4px;
+        padding: 8px;
+        margin: 0;
+    }
+
+    #ic-category-navigator .ic-empty-dialog__list li {
+        padding: 3px 0;
+        border-bottom: 1px solid #f1f1f1;
+    }
+
+    #ic-category-navigator .ic-empty-dialog__list li:last-child {
+        border-bottom: 0;
+    }
+
+    #ic-category-navigator .ic-empty-dialog__actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 10px;
     }
 </style>
 ' . $script;

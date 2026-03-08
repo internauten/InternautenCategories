@@ -30,6 +30,31 @@ Dieses Repository enthaelt ein PrestaShop-Modul, das Unterkategorien innerhalb e
 - Die automatische Empfehlung zeigt zusaetzlich eine farbliche Last-Stufe (`LOW`, `MEDIUM`, `HIGH`, `VERY HIGH`) zur schnelleren Einschaetzung.
 - Neben der Last-Stufe wird ein Info-Tooltip mit den genauen Schwellenwerten angezeigt (`<=200`, `<=1000`, `<=3000`, `>3000`).
 
+### Sprachdateien (de/en)
+
+- Das Modul enthaelt Sprachdateien unter `internautencategories/translations/de.php` und `internautencategories/translations/en.php`.
+- Bei Aenderungen an den Sprachdateien im Backoffice unter `International > Uebersetzungen` die Modul-Uebersetzungen neu laden/synchronisieren.
+- Danach den PrestaShop-Cache leeren, damit die geaenderten Texte im Moduldialog sichtbar werden.
+
+#### Troubleshooting: Uebersetzungen werden nicht angezeigt
+
+- Pruefen, ob im Backoffice die richtige Sprache aktiv ist (z. B. Deutsch vs. Englisch).
+- Modul-Uebersetzungen erneut synchronisieren und danach Seite hart neu laden (Browser-Reload ohne Cache).
+- Sicherstellen, dass das Modul korrekt `internautencategories` heisst und die Dateien unter `internautencategories/translations/` liegen.
+- PrestaShop-Cache erneut leeren (`var/cache/*`) und ggf. kurz ab- und wieder anmelden.
+
+##### Optional: Cache im Docker-Container leeren
+
+Wenn PrestaShop in Docker laeuft, kannst du den Cache direkt im laufenden Container leeren:
+
+```bash
+docker compose exec prestashop sh -lc 'rm -rf /var/www/html/var/cache/*'
+```
+
+Falls der Service-Name in deiner `docker-compose.yml` anders heisst, ersetze `prestashop` entsprechend.
+
+Oder bash auf container im VSCode öffnen.
+
 ## Entwicklung
 
 ### In einem lokalen Docker Container
@@ -59,6 +84,13 @@ Dieses Repository enthaelt ein PrestaShop-Modul, das Unterkategorien innerhalb e
 ### oder Azur VM (Kopie einer produktiven Umgebung)
 
 Das bereitstellen der Kopie einer VM ist im [README des Repositoris InternautenB2BOffer](https://github.com/internauten/InternautenB2BOffer?tab=readme-ov-file#development) beschrieben.
+
+### Nach Änderungen immer cache leeren
+
+```bash
+cd /var/www/html/
+sudo rm -rf var/cache/*
+```
 
 ## GitHub Release Action
 
