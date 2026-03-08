@@ -8,6 +8,7 @@ class InternautenCategories extends Module
 {
     private const AJAX_ACTION_CATEGORY_CHILDREN = 'icGetCategoryChildren';
     private const AJAX_ACTION_EMPTY_CATEGORIES = 'icGetEmptyCategories';
+    private const AJAX_ACTION_HIDE_EMPTY_CATEGORIES = 'icHideEmptyCategories';
     private const CONFIG_CATEGORY_ID = 'IC_SORT_PARENT_CATEGORY_ID';
     private const CONFIG_LANGUAGE_ID = 'IC_SORT_PRIMARY_LANGUAGE_ID';
     private const CONFIG_SORT_ALL_LANGUAGES = 'IC_SORT_ALL_LANGUAGES';
@@ -73,6 +74,12 @@ class InternautenCategories extends Module
 
             if ($action === self::AJAX_ACTION_EMPTY_CATEGORIES) {
                 $this->renderEmptyCategoriesAjax();
+
+                return '';
+            }
+
+            if ($action === self::AJAX_ACTION_HIDE_EMPTY_CATEGORIES) {
+                $this->renderHideEmptyCategoriesAjax();
 
                 return '';
             }
@@ -142,6 +149,72 @@ class InternautenCategories extends Module
         ]);
     }
 
+    private function renderHideEmptyCategoriesAjax()
+    {
+        $shopId = (int) $this->context->shop->id;
+        $categoryIdsRaw = trim((string) Tools::getValue('category_ids', ''));
+
+        if ($categoryIdsRaw === '') {
+            $this->sendCategoryNavigatorJson([
+                'ok' => false,
+                'error' => $this->l('No categories selected.'),
+            ]);
+        }
+
+        $parts = array_filter(array_map('trim', explode(',', $categoryIdsRaw)), static function ($value) {
+            return $value !== '';
+        });
+
+        $categoryIds = [];
+        foreach ($parts as $part) {
+            if (!ctype_digit($part) || (int) $part <= 0) {
+                $this->sendCategoryNavigatorJson([
+                    'ok' => false,
+                    'error' => $this->l('Selected categories could not be updated.'),
+                ]);
+            }
+
+            $categoryIds[] = (int) $part;
+        }
+
+        $categoryIds = array_values(array_unique($categoryIds));
+        if (empty($categoryIds)) {
+            $this->sendCategoryNavigatorJson([
+                'ok' => false,
+                'error' => $this->l('No categories selected.'),
+            ]);
+        }
+
+        $idsSql = implode(',', $categoryIds);
+        $db = Db::getInstance();
+
+        $updatedShop = $db->execute(
+            'UPDATE `' . _DB_PREFIX_ . 'category_shop`
+             SET `active` = 0
+             WHERE `id_shop` = ' . (int) $shopId . '
+               AND `id_category` IN (' . $idsSql . ')'
+        );
+
+        $updatedCategory = $db->execute(
+            'UPDATE `' . _DB_PREFIX_ . 'category`
+             SET `active` = 0
+             WHERE `id_category` IN (' . $idsSql . ')'
+        );
+
+        if (!$updatedShop || !$updatedCategory) {
+            $this->sendCategoryNavigatorJson([
+                'ok' => false,
+                'error' => $this->l('Selected categories could not be updated.'),
+            ]);
+        }
+
+        $this->sendCategoryNavigatorJson([
+            'ok' => true,
+            'updated' => count($categoryIds),
+            'message' => $this->l('Selected categories were set to hidden.'),
+        ]);
+    }
+
     private function getEmptyCategoriesForDialog($shopId, $languageId)
     {
         $sql = 'SELECT c.id_category, cl.name
@@ -154,6 +227,8 @@ class InternautenCategories extends Module
                     AND cl.id_lang = ' . (int) $languageId . '
                     AND cl.id_shop = ' . (int) $shopId . '
                 WHERE c.id_parent > 0
+                    AND c.active = 1
+                    AND cs.active = 1
                     AND NOT EXISTS (
                         SELECT 1
                         FROM `' . _DB_PREFIX_ . 'category` c2
@@ -686,6 +761,10 @@ class InternautenCategories extends Module
             . '&configure=' . $this->name
             . '&token=' . Tools::getAdminTokenLite('AdminModules')
             . '&ajax=1&action=' . self::AJAX_ACTION_EMPTY_CATEGORIES;
+        $hideEmptyCategoriesAjaxUrl = AdminController::$currentIndex
+            . '&configure=' . $this->name
+            . '&token=' . Tools::getAdminTokenLite('AdminModules')
+            . '&ajax=1&action=' . self::AJAX_ACTION_HIDE_EMPTY_CATEGORIES;
 
         $texts = [
             'title' => $this->l('Category navigator'),
@@ -704,6 +783,10 @@ class InternautenCategories extends Module
             'empty_categories_loading' => $this->l('Loading empty categories...'),
             'empty_categories_none' => $this->l('No empty categories found.'),
             'empty_categories_error' => $this->l('Empty categories could not be loaded.'),
+            'hide_selected' => $this->l('Hide selected categories in this shop'),
+            'hiding_in_progress' => $this->l('Updating categories...'),
+            'hide_selected_success' => $this->l('Selected categories were set to hidden.'),
+            'hide_selected_error' => $this->l('Selected categories could not be updated.'),
         ];
 
         $script = '<script type="text/javascript">
@@ -721,13 +804,46 @@ class InternautenCategories extends Module
     var showEmptyBtn = navigatorRoot.querySelector("[data-role=ic-show-empty]");
     var emptyDialog = navigatorRoot.querySelector("[data-role=ic-empty-dialog]");
     var emptyDialogCloseBtn = navigatorRoot.querySelector("[data-role=ic-empty-close]");
+    var emptyDialogHideBtn = navigatorRoot.querySelector("[data-role=ic-empty-hide-selected]");
     var emptyDialogList = navigatorRoot.querySelector("[data-role=ic-empty-list]");
 
     var texts = ' . json_encode($texts) . ';
     var ajaxBaseUrl = ' . json_encode($ajaxUrl) . ';
     var emptyCategoriesAjaxUrl = ' . json_encode($emptyCategoriesAjaxUrl) . ';
+    var hideEmptyCategoriesAjaxUrl = ' . json_encode($hideEmptyCategoriesAjaxUrl) . ';
     var rootParentId = ' . (int) $defaultParentId . ';
     var stateStack = [];
+
+    function findParentListItem(element) {
+        var current = element;
+        while (current && current !== emptyDialogList) {
+            if (current.tagName && current.tagName.toLowerCase() === "li") {
+                return current;
+            }
+            current = current.parentNode;
+        }
+
+        return null;
+    }
+
+    function updateHideSelectedButtonState() {
+        if (!emptyDialogHideBtn || !emptyDialogList) {
+            return;
+        }
+
+        var checkedCount = emptyDialogList.querySelectorAll("input[type=checkbox][data-role=ic-empty-checkbox]:checked").length;
+        emptyDialogHideBtn.disabled = checkedCount === 0;
+    }
+
+    function setEmptyDialogStatus(message, isError) {
+        var statusEl = navigatorRoot.querySelector("[data-role=ic-empty-status]");
+        if (!statusEl) {
+            return;
+        }
+
+        statusEl.textContent = message ? String(message) : "";
+        statusEl.className = isError ? "ic-empty-dialog__status text-danger" : "ic-empty-dialog__status text-success";
+    }
 
     function setSelected(id) {
         if (!configInput) {
@@ -818,6 +934,7 @@ class InternautenCategories extends Module
     function renderEmptyCategories(categories) {
         if (!Array.isArray(categories) || !categories.length) {
             emptyDialogList.innerHTML = "<li>" + texts.empty_categories_none + "</li>";
+            updateHideSelectedButtonState();
             return;
         }
 
@@ -825,9 +942,27 @@ class InternautenCategories extends Module
 
         categories.forEach(function (category) {
             var row = document.createElement("li");
-            row.textContent = category.name + " (#" + category.id + ")";
+            row.className = "ic-empty-dialog__row";
+            row.setAttribute("data-role", "ic-empty-row");
+
+            var rowLabel = document.createElement("label");
+            rowLabel.className = "ic-empty-dialog__row-label";
+
+            var checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.setAttribute("data-role", "ic-empty-checkbox");
+            checkbox.setAttribute("data-category-id", String(category.id));
+
+            var rowText = document.createElement("span");
+            rowText.textContent = category.name + " (#" + category.id + ")";
+
+            rowLabel.appendChild(checkbox);
+            rowLabel.appendChild(rowText);
+            row.appendChild(rowLabel);
             emptyDialogList.appendChild(row);
         });
+
+        updateHideSelectedButtonState();
     }
 
     function openEmptyCategoriesDialog() {
@@ -835,6 +970,7 @@ class InternautenCategories extends Module
             return;
         }
 
+        setEmptyDialogStatus("", false);
         emptyDialogList.innerHTML = "<li>" + texts.empty_categories_loading + "</li>";
 
         if (typeof emptyDialog.showModal === "function") {
@@ -856,6 +992,7 @@ class InternautenCategories extends Module
             renderEmptyCategories(data.categories);
         }).catch(function () {
             emptyDialogList.innerHTML = "<li class=\"text-danger\">" + texts.empty_categories_error + "</li>";
+            updateHideSelectedButtonState();
         });
     }
 
@@ -895,6 +1032,79 @@ class InternautenCategories extends Module
         });
     }
 
+    if (emptyDialogHideBtn) {
+        emptyDialogHideBtn.addEventListener("click", function () {
+            if (!emptyDialogList) {
+                return;
+            }
+
+            var checkedBoxes = emptyDialogList.querySelectorAll("input[type=checkbox][data-role=ic-empty-checkbox]:checked");
+            if (!checkedBoxes.length) {
+                updateHideSelectedButtonState();
+                return;
+            }
+
+            var selectedCategoryIds = [];
+            for (var index = 0; index < checkedBoxes.length; index++) {
+                var checkbox = checkedBoxes[index];
+                var categoryId = checkbox.getAttribute("data-category-id");
+                if (categoryId) {
+                    selectedCategoryIds.push(categoryId);
+                }
+            }
+
+            if (!selectedCategoryIds.length) {
+                setEmptyDialogStatus(texts.hide_selected_error, true);
+                updateHideSelectedButtonState();
+                return;
+            }
+
+            emptyDialogHideBtn.disabled = true;
+            setEmptyDialogStatus(texts.hiding_in_progress, false);
+
+            fetch(hideEmptyCategoriesAjaxUrl, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+                },
+                body: "category_ids=" + encodeURIComponent(selectedCategoryIds.join(","))
+            }).then(function (response) {
+                return response.json();
+            }).then(function (data) {
+                if (!data || !data.ok) {
+                    setEmptyDialogStatus((data && data.error) ? data.error : texts.hide_selected_error, true);
+                    updateHideSelectedButtonState();
+                    return;
+                }
+
+                for (var hideIndex = 0; hideIndex < checkedBoxes.length; hideIndex++) {
+                    var checked = checkedBoxes[hideIndex];
+                    var rowToHide = findParentListItem(checked);
+                    if (rowToHide) {
+                        rowToHide.className += " ic-empty-dialog__row--hidden";
+                    }
+                    checked.checked = false;
+                }
+
+                setEmptyDialogStatus(data.message ? data.message : texts.hide_selected_success, false);
+                updateHideSelectedButtonState();
+            }).catch(function () {
+                setEmptyDialogStatus(texts.hide_selected_error, true);
+                updateHideSelectedButtonState();
+            });
+        });
+    }
+
+    if (emptyDialogList) {
+        emptyDialogList.addEventListener("change", function (event) {
+            var target = event.target;
+            if (target && target.getAttribute && target.getAttribute("data-role") === "ic-empty-checkbox") {
+                updateHideSelectedButtonState();
+            }
+        });
+    }
+
     if (emptyDialog) {
         emptyDialog.addEventListener("cancel", function (event) {
             event.preventDefault();
@@ -931,7 +1141,9 @@ class InternautenCategories extends Module
         <ul data-role="ic-empty-list" class="list-unstyled ic-empty-dialog__list">
             <li>' . Tools::safeOutput($texts['empty_categories_loading']) . '</li>
         </ul>
+        <div data-role="ic-empty-status" class="ic-empty-dialog__status"></div>
         <div class="ic-empty-dialog__actions">
+            <button type="button" class="btn btn-default" data-role="ic-empty-hide-selected" disabled="disabled">' . Tools::safeOutput($texts['hide_selected']) . '</button>
             <button type="button" class="btn btn-default" data-role="ic-empty-close">' . Tools::safeOutput($texts['close']) . '</button>
         </div>
     </dialog>
@@ -990,6 +1202,19 @@ class InternautenCategories extends Module
         border-bottom: 1px solid #f1f1f1;
     }
 
+    #ic-category-navigator .ic-empty-dialog__row-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0;
+        font-weight: normal;
+        cursor: pointer;
+    }
+
+    #ic-category-navigator .ic-empty-dialog__row--hidden {
+        display: none !important;
+    }
+
     #ic-category-navigator .ic-empty-dialog__list li:last-child {
         border-bottom: 0;
     }
@@ -997,7 +1222,13 @@ class InternautenCategories extends Module
     #ic-category-navigator .ic-empty-dialog__actions {
         display: flex;
         justify-content: flex-end;
+        gap: 8px;
         margin-top: 10px;
+    }
+
+    #ic-category-navigator .ic-empty-dialog__status {
+        min-height: 20px;
+        margin-top: 8px;
     }
 </style>
 ' . $script;

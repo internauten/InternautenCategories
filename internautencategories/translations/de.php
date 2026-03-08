@@ -37,6 +37,11 @@ $_MODULE['<{internautencategories}prestashop>internautencategories_d3d2e617335f0
 $_MODULE['<{internautencategories}prestashop>internautencategories_adb15e39268bb15c0e86086db12d7f47'] = 'Leere Kategorien werden geladen...';
 $_MODULE['<{internautencategories}prestashop>internautencategories_3167a856dea360e40c9a88ffa35194e8'] = 'Keine leeren Kategorien gefunden.';
 $_MODULE['<{internautencategories}prestashop>internautencategories_153e0f91b505f9e1673abb29f041effd'] = 'Leere Kategorien konnten nicht geladen werden.';
+$_MODULE['<{internautencategories}prestashop>internautencategories_d607a0e1e53f8f37572b409840fdd5f8'] = 'Ausgewaehlte Kategorien in diesem Shop ausblenden';
+$_MODULE['<{internautencategories}prestashop>internautencategories_4b46c23a6feda3df604cc105890b2f19'] = 'Kategorien werden aktualisiert...';
+$_MODULE['<{internautencategories}prestashop>internautencategories_669249173b857698bade4575d8fd22cd'] = 'Ausgewaehlte Kategorien wurden auf ausgeblendet gesetzt.';
+$_MODULE['<{internautencategories}prestashop>internautencategories_619069282e13bfe32b038eb165be570f'] = 'Ausgewaehlte Kategorien konnten nicht aktualisiert werden.';
+$_MODULE['<{internautencategories}prestashop>internautencategories_0032a0cfed7a99f0fd01957765fbaab3'] = 'Keine Kategorien ausgewaehlt.';
 $_MODULE['<{internautencategories}prestashop>internautencategories_d54e642c09b27c65b259d0f8e98387c0'] = 'Unterkategorie-Sortierung';
 $_MODULE['<{internautencategories}prestashop>internautencategories_051368bddd5091528250237f1a957d21'] = 'Elternkategorie-ID (optional)';
 $_MODULE['<{internautencategories}prestashop>internautencategories_95307b27ddf05533fc5b929c687d43b6'] = 'Leer lassen, um Unterkategorien fuer alle Elternkategorien zu sortieren.';
