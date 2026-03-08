@@ -1,4 +1,4 @@
-# Internauten Categories Module
+# Internauten Categories Module for Prestashop
 
 [![Sponsor](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-ea4aaa?logo=githubsponsors)](https://github.com/sponsors/internauten)
 [![Stars](https://img.shields.io/github/stars/internauten/InternautenCategories?style=social)](https://github.com/internauten/InternautenCategories/stargazers)
