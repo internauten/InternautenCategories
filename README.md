@@ -25,6 +25,36 @@ Dieses Repository enthaelt ein PrestaShop-Modul, das Unterkategorien innerhalb e
 - Die automatische Empfehlung zeigt zusaetzlich eine farbliche Last-Stufe (`LOW`, `MEDIUM`, `HIGH`, `VERY HIGH`) zur schnelleren Einschaetzung.
 - Neben der Last-Stufe wird ein Info-Tooltip mit den genauen Schwellenwerten angezeigt (`<=200`, `<=1000`, `<=3000`, `>3000`).
 
+## Entwicklung
+
+### In einem lokalen Docker Container
+
+#### Voraussetzungen Windows
+
+- WSL2 (mit Umbuntu) installiert und konfiguriert
+- Docker Desktop installiert mit WSL2 aktiv und Ubuntu als WSL Integration
+- VS Code installiert
+
+#### Docker Compose
+
+- Ubuntu (WSL) starten
+- Git Repo holen (oder ein fork davon) und VS Code starten
+  ```bash
+  git clone https://github.com/internauten/InternautenCategories.git
+  cd InternautenCategories
+  code .
+  ```
+- [docker compose File](docker-compose.yml) anpassen (xyz mit ihren Werten ersetzen)
+- Container erstellen
+  ```bash
+  docker compose up
+  ```
+- Das Modul sollte sogleich im Prestashop Admin verfügbar sein.
+
+### oder Azur VM (Kopie einer produktiven Umgebung)
+
+Das bereitstellen der Kopie einer VM ist im [README des Repositoris InternautenB2BOffer](https://github.com/internauten/InternautenB2BOffer?tab=readme-ov-file#development) beschrieben.
+
 ## GitHub Release Action
 
 Im Repository ist eine GitHub Action vorhanden, die bei einem Tag-Push automatisch einen Release inklusive Installations-ZIP erstellt.
