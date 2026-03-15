@@ -16,6 +16,7 @@ class InternautenCategories extends Module
     private const CONFIG_SORT_ALL_LANGUAGES = 'IC_SORT_ALL_LANGUAGES';
     private const CONFIG_SORT_LOCALE = 'IC_SORT_LOCALE';
     private const CONFIG_BATCH_SIZE = 'IC_SORT_UPDATE_BATCH_SIZE';
+    private const CONFIG_CREATE_INPUT = 'IC_CREATE_SUBCATEGORIES_INPUT';
     private const DEFAULT_BATCH_SIZE = 200;
     private const MIN_BATCH_SIZE = 10;
     private const MAX_BATCH_SIZE = 2000;
@@ -118,7 +119,260 @@ class InternautenCategories extends Module
             }
         }
 
+        if (Tools::isSubmit('submitInternautenCategoriesCreateByNames')) {
+            $result = $this->runCreateSubcategoriesByNameInput();
+            if ($result['ok']) {
+                $output .= $this->displayConfirmation(sprintf(
+                    $this->l('Create completed. New subcategories: %d. Existing skipped: %d.'),
+                    (int) $result['created'],
+                    (int) $result['skipped']
+                ));
+
+                if (!empty($result['warnings'])) {
+                    $output .= $this->displayWarning(implode('<br>', $result['warnings']));
+                }
+            } else {
+                $output .= $this->displayError($result['error']);
+            }
+        }
+
         return $output . $this->renderForm();
+    }
+
+    private function runCreateSubcategoriesByNameInput()
+    {
+        try {
+            $inputRaw = trim((string) Tools::getValue(self::CONFIG_CREATE_INPUT, ''));
+            if ($inputRaw === '') {
+                return [
+                    'ok' => false,
+                    'error' => $this->l('Please provide at least one line in the format Subcategory:Parent category.'),
+                ];
+            }
+
+            $shopId = (int) $this->context->shop->id;
+            $languageId = (int) Configuration::get(self::CONFIG_LANGUAGE_ID);
+            if ($languageId <= 0 || !Language::getLanguage($languageId)) {
+                $languageId = (int) $this->context->language->id;
+            }
+
+            $languages = Language::getLanguages(true, $shopId, false);
+            $languageIds = array_map(static function ($language) {
+                return (int) $language['id_lang'];
+            }, $languages);
+
+            if (empty($languageIds)) {
+                return [
+                    'ok' => false,
+                    'error' => $this->l('No active languages found for category creation.'),
+                ];
+            }
+
+            $lines = preg_split('/\r\n|\r|\n/', $inputRaw);
+            if (!is_array($lines) || empty($lines)) {
+                return [
+                    'ok' => false,
+                    'error' => $this->l('Input could not be parsed.'),
+                ];
+            }
+
+            $created = 0;
+            $skipped = 0;
+            $warnings = [];
+
+            foreach ($lines as $index => $lineRaw) {
+                $line = trim((string) $lineRaw);
+                if ($line === '') {
+                    continue;
+                }
+
+                $parts = explode(':', $line, 2);
+                if (count($parts) !== 2) {
+                    return [
+                        'ok' => false,
+                        'error' => sprintf(
+                            $this->l('Line %d is invalid. Use format: Subcategory:Parent category.'),
+                            (int) $index + 1
+                        ),
+                    ];
+                }
+
+                $subcategoryName = trim((string) $parts[0]);
+                $parentName = trim((string) $parts[1]);
+
+                if ($subcategoryName === '' || $parentName === '') {
+                    return [
+                        'ok' => false,
+                        'error' => sprintf(
+                            $this->l('Line %d is invalid. Both names must be non-empty.'),
+                            (int) $index + 1
+                        ),
+                    ];
+                }
+
+                $parentLookup = $this->findParentCategoryIdsByName($parentName, $languageId, $shopId);
+                if (empty($parentLookup)) {
+                    return [
+                        'ok' => false,
+                        'error' => sprintf(
+                            $this->l('Line %1$d: Parent category "%2$s" was not found.'),
+                            (int) $index + 1,
+                            Tools::safeOutput($parentName)
+                        ),
+                    ];
+                }
+
+                if (count($parentLookup) > 1) {
+                    return [
+                        'ok' => false,
+                        'error' => sprintf(
+                            $this->l('Line %1$d: Parent category "%2$s" is ambiguous (%3$d matches). Please use unique names.'),
+                            (int) $index + 1,
+                            Tools::safeOutput($parentName),
+                            count($parentLookup)
+                        ),
+                    ];
+                }
+
+                $parentId = (int) $parentLookup[0];
+                if ($this->subcategoryExistsUnderParent($subcategoryName, $parentId, $languageId, $shopId)) {
+                    ++$skipped;
+                    $warnings[] = sprintf(
+                        $this->l('Line %1$d skipped: "%2$s" already exists under "%3$s".'),
+                        (int) $index + 1,
+                        Tools::safeOutput($subcategoryName),
+                        Tools::safeOutput($parentName)
+                    );
+                    continue;
+                }
+
+                $createResult = $this->createSubcategoryUnderParent($subcategoryName, $parentId, $languageIds);
+                if (!$createResult['ok']) {
+                    return [
+                        'ok' => false,
+                        'error' => sprintf(
+                            $this->l('Line %1$d failed: %2$s'),
+                            (int) $index + 1,
+                            $createResult['error']
+                        ),
+                    ];
+                }
+
+                ++$created;
+            }
+
+            return [
+                'ok' => true,
+                'created' => $created,
+                'skipped' => $skipped,
+                'warnings' => $warnings,
+            ];
+        } catch (Exception $e) {
+            return [
+                'ok' => false,
+                'error' => sprintf(
+                    $this->l('Database error while creating subcategories: %s'),
+                    Tools::safeOutput($e->getMessage())
+                ),
+            ];
+        }
+    }
+
+    private function findParentCategoryIdsByName($parentName, $languageId, $shopId)
+    {
+        $sql = 'SELECT c.id_category
+                       , cl.name
+                FROM `' . _DB_PREFIX_ . 'category` c
+                INNER JOIN `' . _DB_PREFIX_ . 'category_shop` cs
+                    ON cs.id_category = c.id_category
+                    AND cs.id_shop = ' . (int) $shopId . '
+                INNER JOIN `' . _DB_PREFIX_ . 'category_lang` cl
+                    ON cl.id_category = c.id_category
+                    AND cl.id_lang = ' . (int) $languageId . '
+                    AND cl.id_shop = ' . (int) $shopId . '
+                ORDER BY c.id_category ASC';
+
+        try {
+            $rows = Db::getInstance()->executeS($sql);
+        } catch (Exception $e) {
+            throw new Exception('Parent lookup query failed: ' . $sql . ' | ' . $e->getMessage());
+        }
+        if (!is_array($rows) || empty($rows)) {
+            return [];
+        }
+
+        $targetName = trim((string) $parentName);
+        $matches = [];
+        foreach ($rows as $row) {
+            $candidateName = trim((string) $row['name']);
+            if ($candidateName === $targetName) {
+                $matches[] = (int) $row['id_category'];
+            }
+        }
+
+        return $matches;
+    }
+
+    private function subcategoryExistsUnderParent($subcategoryName, $parentId, $languageId, $shopId)
+    {
+        $sql = 'SELECT cl.name
+                FROM `' . _DB_PREFIX_ . 'category` c
+                INNER JOIN `' . _DB_PREFIX_ . 'category_shop` cs
+                    ON cs.id_category = c.id_category
+                    AND cs.id_shop = ' . (int) $shopId . '
+                INNER JOIN `' . _DB_PREFIX_ . 'category_lang` cl
+                    ON cl.id_category = c.id_category
+                    AND cl.id_lang = ' . (int) $languageId . '
+                    AND cl.id_shop = ' . (int) $shopId . '
+                WHERE c.id_parent = ' . (int) $parentId . '
+                ORDER BY c.id_category ASC';
+
+        try {
+            $rows = Db::getInstance()->executeS($sql);
+        } catch (Exception $e) {
+            throw new Exception('Subcategory exists query failed: ' . $sql . ' | ' . $e->getMessage());
+        }
+
+        if (!is_array($rows) || empty($rows)) {
+            return false;
+        }
+
+        $targetName = trim((string) $subcategoryName);
+        foreach ($rows as $row) {
+            $candidateName = trim((string) $row['name']);
+            if ($candidateName === $targetName) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function createSubcategoryUnderParent($subcategoryName, $parentId, array $languageIds)
+    {
+        $category = new Category();
+        $category->id_parent = (int) $parentId;
+        $category->active = 1;
+
+        $names = [];
+        $linkRewrites = [];
+        foreach ($languageIds as $languageId) {
+            $langId = (int) $languageId;
+            $names[$langId] = (string) $subcategoryName;
+            $linkRewrites[$langId] = Tools::link_rewrite((string) $subcategoryName);
+        }
+
+        $category->name = $names;
+        $category->link_rewrite = $linkRewrites;
+
+        if (!$category->add()) {
+            return [
+                'ok' => false,
+                'error' => $this->l('Category could not be created.'),
+            ];
+        }
+
+        return ['ok' => true];
     }
 
     private function renderCategoryNavigatorAjax()
@@ -1734,6 +1988,14 @@ class InternautenCategories extends Module
                             $dynamicRecommendation
                         ),
                     ],
+                    [
+                        'type' => 'textarea',
+                        'label' => $this->l('Create subcategories (one per line)'),
+                        'name' => self::CONFIG_CREATE_INPUT,
+                        'cols' => 80,
+                        'rows' => 8,
+                        'desc' => $this->l('Format per line: Subcategory:Parent category. Example: Sneakers:Shoes'),
+                    ],
                 ],
                 'submit' => [
                     'title' => $this->l('Save settings'),
@@ -1746,6 +2008,13 @@ class InternautenCategories extends Module
                         'type' => 'submit',
                         'class' => 'btn btn-default pull-right',
                         'icon' => 'process-icon-save',
+                    ],
+                    [
+                        'title' => $this->l('Create subcategories'),
+                        'name' => 'submitInternautenCategoriesCreateByNames',
+                        'type' => 'submit',
+                        'class' => 'btn btn-default pull-right',
+                        'icon' => 'process-icon-new',
                     ],
                 ],
             ],
@@ -1766,6 +2035,7 @@ class InternautenCategories extends Module
             self::CONFIG_SORT_ALL_LANGUAGES => (int) Configuration::get(self::CONFIG_SORT_ALL_LANGUAGES),
             self::CONFIG_SORT_LOCALE => (string) Configuration::get(self::CONFIG_SORT_LOCALE),
             self::CONFIG_BATCH_SIZE => (int) $this->getConfiguredBatchSize(),
+            self::CONFIG_CREATE_INPUT => (string) Tools::getValue(self::CONFIG_CREATE_INPUT, ''),
         ];
 
         return $helper->generateForm([$fieldsForm]) . $this->renderCategoryNavigatorPanel();

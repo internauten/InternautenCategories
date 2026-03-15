@@ -112,6 +112,40 @@ cd /var/www/html/
 sudo rm -rf var/cache/*
 ```
 
+## Anwendung Create Subcategoiries
+
+Erstellt Subkategorien zu Kategorien.  
+
+Muster Subkategorie:InKategorie
+
+Beispiel Input:
+
+```text
+Single Malt Whisky:Sorte
+Irish Whiskey:Sorte
+Blended Whisky:Sorte
+Whisky Liqueur:Sorte
+World Whisky:Sorte
+Blended Malt:Sorte
+American Whiskey:Sorte
+Canadian Whisky:Sorte
+Grain Whisky:Sorte
+Japanese Whisky:Sorte
+Schweizer Whisky:Sorte
+RUM:Sorte
+VODKA:Sorte
+COGNAC:Sorte
+GIN:Sorte
+Rotwein:Sorte
+RYE WHISKY:Sorte
+Diverses:Diverses
+Food:Diverses
+WoW Club:Diverses
+Literatur:Diverses
+Gutscheine:Diverses
+Gläser:Diverses
+```
+
 ## GitHub Release Action
 
 Im Repository ist eine GitHub Action vorhanden, die bei einem Tag-Push automatisch einen Release inklusive Installations-ZIP erstellt.
@@ -159,3 +193,12 @@ Use a dry-run to preview the tag command without creating or pushing anything:
 This project is licensed under the MIT License. See details [`LICENSE`](LICENSE).
 
 Copyright (c) 2026 die.internauten.ch GmbH
+
+
+Diverses:Diverses
+Food:Diverses
+WoW Club:Diverses
+Literatur:Diverses
+Gutscheine:Diverses
+Gläser:Diverses
+
