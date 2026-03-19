@@ -25,7 +25,7 @@ class InternautenCategories extends Module
     {
         $this->name = 'internautencategories';
         $this->tab = 'administration';
-        $this->version = '0.1.14';
+        $this->version = '0.1.15';
         $this->author = 'die.internauten.ch';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -2065,7 +2065,14 @@ class InternautenCategories extends Module
         $helper->module = $this;
         $helper->name_controller = $this->name;
         $helper->token = false;
-        $helper->currentIndex = 'index.php';
+        // Use just the relative path without full URL
+        $currentUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+        if (strpos($currentUri, '/admin') === 0) {
+            // Admin path - extract just the path part after docroot
+            $helper->currentIndex = $currentUri;
+        } else {
+            $helper->currentIndex = '';
+        }
         $helper->back_url = '';
         $helper->default_form_language = $defaultLang;
         $helper->allow_employee_form_lang = $defaultLang;
