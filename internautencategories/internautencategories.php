@@ -25,7 +25,7 @@ class InternautenCategories extends Module
     {
         $this->name = 'internautencategories';
         $this->tab = 'administration';
-        $this->version = '0.1.12';
+        $this->version = '0.1.13';
         $this->author = 'die.internauten.ch';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -2169,6 +2169,7 @@ class InternautenCategories extends Module
         $html .= '</div></div>';
 
         return $html . $this->renderCategoryNavigatorPanel();
+    }
 
     private function renderFormPS17($fieldsForm)
     {
