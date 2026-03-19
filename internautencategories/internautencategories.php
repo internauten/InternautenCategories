@@ -25,7 +25,7 @@ class InternautenCategories extends Module
     {
         $this->name = 'internautencategories';
         $this->tab = 'administration';
-        $this->version = '0.1.11';
+        $this->version = '0.1.12';
         $this->author = 'die.internauten.ch';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -2060,40 +2060,115 @@ class InternautenCategories extends Module
     private function renderFormPS9($fieldsForm)
     {
         $defaultLang = (int) Configuration::get('PS_LANG_DEFAULT');
+        $html = '';
 
-        $helper = new HelperForm();
-        $helper->module = $this;
-        $helper->name_controller = $this->name;
-        $helper->token = false;
-        $helper->currentIndex = preg_replace('/[?#].*/', '', $_SERVER['REQUEST_URI']);
-        $helper->back_url = '';
-        $helper->default_form_language = $defaultLang;
-        $helper->allow_employee_form_lang = $defaultLang;
-        $helper->title = $this->displayName;
-        $helper->submit_action = 'submitInternautenCategoriesConfig';
-        
-        // Add _token field to form input for Symfony CSRF protection
-        $currentToken = Tools::getValue('_token', '');
-        if ($currentToken) {
-            $fieldsForm['form']['input'][] = [
-                'type' => 'hidden',
-                'name' => '_token',
-                'value' => $currentToken,
-            ];
-        }
-        
-        $helper->fields_value = [
+        // Build configuration values
+        $configValues = [
             self::CONFIG_CATEGORY_ID => Configuration::get(self::CONFIG_CATEGORY_ID),
             self::CONFIG_LANGUAGE_ID => (int) Configuration::get(self::CONFIG_LANGUAGE_ID),
             self::CONFIG_SORT_ALL_LANGUAGES => (int) Configuration::get(self::CONFIG_SORT_ALL_LANGUAGES),
             self::CONFIG_SORT_LOCALE => (string) Configuration::get(self::CONFIG_SORT_LOCALE),
             self::CONFIG_BATCH_SIZE => (int) $this->getConfiguredBatchSize(),
             self::CONFIG_CREATE_INPUT => (string) Tools::getValue(self::CONFIG_CREATE_INPUT, ''),
-            '_token' => $currentToken,
         ];
 
-        return $helper->generateForm([$fieldsForm]) . $this->renderCategoryNavigatorPanel();
-    }
+        // Output form wrapper
+        $html .= '<div class="bootstrap">';
+        $html .= '<div class="panel" id="fieldset_0">';
+        $html .= '<h3 class="panel-title"><i class="icon-sort-alpha-asc"></i> ' . htmlspecialchars($this->l('Subcategory Sorting')) . '</h3>';
+        $html .= '<form action="" method="post" class="form-horizontal" id="form_internautencategories">';
+        
+        // Add CSRF token from current request
+        $currentToken = Tools::getValue('_token', '');
+        if ($currentToken) {
+            $html .= sprintf('<input type="hidden" name="_token" value="%s">', htmlspecialchars($currentToken));
+        }
+        
+        // Render form fields manually
+        foreach ($fieldsForm['form']['input'] as $field) {
+            $fieldName = $field['name'] ?? '';
+            $fieldValue = $configValues[$fieldName] ?? Tools::getValue($fieldName, '');
+            $fieldLabel = $field['label'] ?? '';
+            $fieldDesc = $field['desc'] ?? '';
+            $fieldType = $field['type'] ?? 'text';
+
+            $html .= '<div class="form-group">';
+            if ($fieldLabel) {
+                $html .= sprintf('<label class="control-label col-lg-3">%s</label>', htmlspecialchars($fieldLabel));
+            }
+            $html .= '<div class="col-lg-9">';
+
+            switch ($fieldType) {
+                case 'text':
+                    $html .= sprintf(
+                        '<input type="text" name="%s" value="%s" class="form-control">',
+                        htmlspecialchars($fieldName),
+                        htmlspecialchars($fieldValue)
+                    );
+                    break;
+                case 'textarea':
+                    $html .= sprintf(
+                        '<textarea name="%s" class="form-control" cols="80" rows="8">%s</textarea>',
+                        htmlspecialchars($fieldName),
+                        htmlspecialchars($fieldValue)
+                    );
+                    break;
+                case 'select':
+                    $html .= sprintf('<select name="%s" class="form-control">', htmlspecialchars($fieldName));
+                    if (isset($field['options']['query'])) {
+                        foreach ($field['options']['query'] as $option) {
+                            $optId = $option[$field['options']['id']] ?? '';
+                            $optName = $option[$field['options']['name']] ?? '';
+                            $selected = (int)$fieldValue === (int)$optId ? ' selected' : '';
+                            $html .= sprintf(
+                                '<option value="%s"%s>%s</option>',
+                                htmlspecialchars($optId),
+                                $selected,
+                                htmlspecialchars($optName)
+                            );
+                        }
+                    }
+                    $html .= '</select>';
+                    break;
+                case 'switch':
+                    foreach ($field['values'] ?? [] as $valueOpt) {
+                        $checked = (int)$fieldValue === (int)$valueOpt['value'] ? ' checked' : '';
+                        $html .= sprintf(
+                            '<input type="radio" name="%s" value="%s"%s id="%s"> <label for="%s">%s</label><br>',
+                            htmlspecialchars($fieldName),
+                            htmlspecialchars($valueOpt['value']),
+                            $checked,
+                            htmlspecialchars($valueOpt['id']),
+                            htmlspecialchars($valueOpt['id']),
+                            htmlspecialchars($valueOpt['label'])
+                        );
+                    }
+                    break;
+            }
+
+            if ($fieldDesc) {
+                $html .= sprintf('<p class="help-block">%s</p>', htmlspecialchars($fieldDesc));
+            }
+            $html .= '</div></div>';
+        }
+
+        // Submit buttons
+        $html .= '<div class="panel-footer">';
+        $html .= '<button type="submit" name="submitInternautenCategoriesConfig" class="btn btn-primary pull-right">';
+        $html .= htmlspecialchars($this->l('Save settings'));
+        $html .= '</button>';
+        $html .= '<button type="submit" name="submitInternautenCategoriesSort" class="btn btn-default pull-right">';
+        $html .= htmlspecialchars($this->l('Sort now'));
+        $html .= '</button>';
+        $html .= '<button type="submit" name="submitInternautenCategoriesCreateByNames" class="btn btn-default pull-right">';
+        $html .= htmlspecialchars($this->l('Create subcategories'));
+        $html .= '</button>';
+        $html .= '</div>';
+        
+        $html .= '</form>';
+        $html .= '</div></div>';
+
+        return $html . $this->renderCategoryNavigatorPanel();
 
     private function renderFormPS17($fieldsForm)
     {
