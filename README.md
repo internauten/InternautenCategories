@@ -138,7 +138,6 @@ COGNAC:Sorte
 GIN:Sorte
 Rotwein:Sorte
 RYE WHISKY:Sorte
-Diverses:Diverses
 Food:Diverses
 WoW Club:Diverses
 Literatur:Diverses

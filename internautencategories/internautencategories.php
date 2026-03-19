@@ -359,7 +359,7 @@ class InternautenCategories extends Module
         foreach ($languageIds as $languageId) {
             $langId = (int) $languageId;
             $names[$langId] = (string) $subcategoryName;
-            $linkRewrites[$langId] = Tools::link_rewrite((string) $subcategoryName);
+            $linkRewrites[$langId] = Tools::str2url((string) $subcategoryName);
         }
 
         $category->name = $names;
