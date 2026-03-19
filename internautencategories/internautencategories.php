@@ -25,7 +25,7 @@ class InternautenCategories extends Module
     {
         $this->name = 'internautencategories';
         $this->tab = 'administration';
-        $this->version = '0.1.10';
+        $this->version = '0.1.11';
         $this->author = 'die.internauten.ch';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -2048,20 +2048,62 @@ class InternautenCategories extends Module
             ],
         ];
 
+        // PrestaShop 9.x: Use HelperForm with Symfony token support
+        if (version_compare(_PS_VERSION_, '9.0.0', '>=')) {
+            return $this->renderFormPS9($fieldsForm);
+        }
+        
+        // PrestaShop 1.7.x: Use legacy HelperForm
+        return $this->renderFormPS17($fieldsForm);
+    }
+
+    private function renderFormPS9($fieldsForm)
+    {
+        $defaultLang = (int) Configuration::get('PS_LANG_DEFAULT');
+
         $helper = new HelperForm();
         $helper->module = $this;
         $helper->name_controller = $this->name;
+        $helper->token = false;
+        $helper->currentIndex = preg_replace('/[?#].*/', '', $_SERVER['REQUEST_URI']);
+        $helper->back_url = '';
+        $helper->default_form_language = $defaultLang;
+        $helper->allow_employee_form_lang = $defaultLang;
+        $helper->title = $this->displayName;
+        $helper->submit_action = 'submitInternautenCategoriesConfig';
         
-        // Token handling for different PS versions
-        if (version_compare(_PS_VERSION_, '9.0.0', '>=')) {
-            // PrestaShop 9.x uses Symfony CSRF protection, disable legacy token
-            $helper->token = false;
-        } else {
-            // PrestaShop 1.7.x uses legacy token protection
-            $helper->token = Tools::getAdminTokenLite('AdminModules');
+        // Add _token field to form input for Symfony CSRF protection
+        $currentToken = Tools::getValue('_token', '');
+        if ($currentToken) {
+            $fieldsForm['form']['input'][] = [
+                'type' => 'hidden',
+                'name' => '_token',
+                'value' => $currentToken,
+            ];
         }
         
-        $helper->currentIndex = preg_replace('/[?#].*/', '', $_SERVER['REQUEST_URI']);
+        $helper->fields_value = [
+            self::CONFIG_CATEGORY_ID => Configuration::get(self::CONFIG_CATEGORY_ID),
+            self::CONFIG_LANGUAGE_ID => (int) Configuration::get(self::CONFIG_LANGUAGE_ID),
+            self::CONFIG_SORT_ALL_LANGUAGES => (int) Configuration::get(self::CONFIG_SORT_ALL_LANGUAGES),
+            self::CONFIG_SORT_LOCALE => (string) Configuration::get(self::CONFIG_SORT_LOCALE),
+            self::CONFIG_BATCH_SIZE => (int) $this->getConfiguredBatchSize(),
+            self::CONFIG_CREATE_INPUT => (string) Tools::getValue(self::CONFIG_CREATE_INPUT, ''),
+            '_token' => $currentToken,
+        ];
+
+        return $helper->generateForm([$fieldsForm]) . $this->renderCategoryNavigatorPanel();
+    }
+
+    private function renderFormPS17($fieldsForm)
+    {
+        $defaultLang = (int) Configuration::get('PS_LANG_DEFAULT');
+
+        $helper = new HelperForm();
+        $helper->module = $this;
+        $helper->name_controller = $this->name;
+        $helper->token = Tools::getAdminTokenLite('AdminModules');
+        $helper->currentIndex = AdminController::$currentIndex . '&configure=' . $this->name;
         $helper->back_url = '';
         $helper->default_form_language = $defaultLang;
         $helper->allow_employee_form_lang = $defaultLang;
