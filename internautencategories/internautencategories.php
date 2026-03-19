@@ -25,7 +25,7 @@ class InternautenCategories extends Module
     {
         $this->name = 'internautencategories';
         $this->tab = 'administration';
-        $this->version = '0.1.15';
+        $this->version = '0.1.16';
         $this->author = 'die.internauten.ch';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -2061,18 +2061,23 @@ class InternautenCategories extends Module
     {
         $defaultLang = (int) Configuration::get('PS_LANG_DEFAULT');
 
+        // PS9 requires both the Symfony _token (CSRF) and legacy token in the POST body.
+        // action="" posts to the current URL unchanged, which already has ?_token=... in the query string.
+        // We additionally inject both tokens as hidden POST fields to satisfy all validation layers.
+        $fieldsForm['form']['input'][] = [
+            'type' => 'hidden',
+            'name' => '_token',
+        ];
+        $fieldsForm['form']['input'][] = [
+            'type' => 'hidden',
+            'name' => 'token',
+        ];
+
         $helper = new HelperForm();
         $helper->module = $this;
         $helper->name_controller = $this->name;
-        $helper->token = false;
-        // Use just the relative path without full URL
-        $currentUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-        if (strpos($currentUri, '/admin') === 0) {
-            // Admin path - extract just the path part after docroot
-            $helper->currentIndex = $currentUri;
-        } else {
-            $helper->currentIndex = '';
-        }
+        $helper->token = false;      // Do NOT append &token= to the form action URL
+        $helper->currentIndex = '';  // action="" → browser POSTs to the current URL (keeps ?_token in query string)
         $helper->back_url = '';
         $helper->default_form_language = $defaultLang;
         $helper->allow_employee_form_lang = $defaultLang;
@@ -2085,6 +2090,8 @@ class InternautenCategories extends Module
             self::CONFIG_SORT_LOCALE => (string) Configuration::get(self::CONFIG_SORT_LOCALE),
             self::CONFIG_BATCH_SIZE => (int) $this->getConfiguredBatchSize(),
             self::CONFIG_CREATE_INPUT => (string) Tools::getValue(self::CONFIG_CREATE_INPUT, ''),
+            '_token' => Tools::getValue('_token', ''),
+            'token' => Tools::getAdminTokenLite('AdminModules'),
         ];
 
         return $helper->generateForm([$fieldsForm]) . $this->renderCategoryNavigatorPanel();
