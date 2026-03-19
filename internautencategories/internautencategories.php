@@ -25,7 +25,7 @@ class InternautenCategories extends Module
     {
         $this->name = 'internautencategories';
         $this->tab = 'administration';
-        $this->version = '0.1.9';
+        $this->version = '0.1.10';
         $this->author = 'die.internauten.ch';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -2051,7 +2051,16 @@ class InternautenCategories extends Module
         $helper = new HelperForm();
         $helper->module = $this;
         $helper->name_controller = $this->name;
-        $helper->token = Tools::getValue('_token', '');
+        
+        // Token handling for different PS versions
+        if (version_compare(_PS_VERSION_, '9.0.0', '>=')) {
+            // PrestaShop 9.x uses Symfony CSRF protection, disable legacy token
+            $helper->token = false;
+        } else {
+            // PrestaShop 1.7.x uses legacy token protection
+            $helper->token = Tools::getAdminTokenLite('AdminModules');
+        }
+        
         $helper->currentIndex = preg_replace('/[?#].*/', '', $_SERVER['REQUEST_URI']);
         $helper->back_url = '';
         $helper->default_form_language = $defaultLang;
