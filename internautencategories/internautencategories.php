@@ -25,7 +25,7 @@ class InternautenCategories extends Module
     {
         $this->name = 'internautencategories';
         $this->tab = 'administration';
-        $this->version = '0.2.17';
+        $this->version = '0.2.18';
         $this->author = 'die.internauten.ch';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -281,15 +281,31 @@ class InternautenCategories extends Module
     private function findParentCategoryIdsByName($parentName, $languageId, $shopId)
     {
         $sql = 'SELECT c.id_category
-                       , cl.name
+                       , COALESCE(cl_shop.name, cl_default.name, cl_any.name) AS name
                 FROM `' . _DB_PREFIX_ . 'category` c
                 INNER JOIN `' . _DB_PREFIX_ . 'category_shop` cs
                     ON cs.id_category = c.id_category
                     AND cs.id_shop = ' . (int) $shopId . '
-                INNER JOIN `' . _DB_PREFIX_ . 'category_lang` cl
-                    ON cl.id_category = c.id_category
-                    AND cl.id_lang = ' . (int) $languageId . '
-                    AND cl.id_shop = ' . (int) $shopId . '
+                LEFT JOIN `' . _DB_PREFIX_ . 'category_lang` cl_shop
+                    ON cl_shop.id_category = c.id_category
+                    AND cl_shop.id_lang = ' . (int) $languageId . '
+                    AND cl_shop.id_shop = ' . (int) $shopId . '
+                LEFT JOIN `' . _DB_PREFIX_ . 'category_lang` cl_default
+                    ON cl_default.id_category = c.id_category
+                    AND cl_default.id_lang = ' . (int) $languageId . '
+                    AND cl_default.id_shop = 0
+                LEFT JOIN `' . _DB_PREFIX_ . 'category_lang` cl_any
+                    ON cl_any.id_category = c.id_category
+                    AND cl_any.id_lang = ' . (int) $languageId . '
+                    AND cl_any.id_shop = (
+                        SELECT MIN(cl3.id_shop)
+                        FROM `' . _DB_PREFIX_ . 'category_lang` cl3
+                        WHERE cl3.id_category = c.id_category
+                            AND cl3.id_lang = ' . (int) $languageId . '
+                    )
+                WHERE cl_shop.id_category IS NOT NULL
+                    OR cl_default.id_category IS NOT NULL
+                    OR cl_any.id_category IS NOT NULL
                 ORDER BY c.id_category ASC';
 
         try {
@@ -315,16 +331,30 @@ class InternautenCategories extends Module
 
     private function subcategoryExistsUnderParent($subcategoryName, $parentId, $languageId, $shopId)
     {
-        $sql = 'SELECT cl.name
+        $sql = 'SELECT COALESCE(cl_shop.name, cl_default.name, cl_any.name) AS name
                 FROM `' . _DB_PREFIX_ . 'category` c
                 INNER JOIN `' . _DB_PREFIX_ . 'category_shop` cs
                     ON cs.id_category = c.id_category
                     AND cs.id_shop = ' . (int) $shopId . '
-                INNER JOIN `' . _DB_PREFIX_ . 'category_lang` cl
-                    ON cl.id_category = c.id_category
-                    AND cl.id_lang = ' . (int) $languageId . '
-                    AND cl.id_shop = ' . (int) $shopId . '
+                LEFT JOIN `' . _DB_PREFIX_ . 'category_lang` cl_shop
+                    ON cl_shop.id_category = c.id_category
+                    AND cl_shop.id_lang = ' . (int) $languageId . '
+                    AND cl_shop.id_shop = ' . (int) $shopId . '
+                LEFT JOIN `' . _DB_PREFIX_ . 'category_lang` cl_default
+                    ON cl_default.id_category = c.id_category
+                    AND cl_default.id_lang = ' . (int) $languageId . '
+                    AND cl_default.id_shop = 0
+                LEFT JOIN `' . _DB_PREFIX_ . 'category_lang` cl_any
+                    ON cl_any.id_category = c.id_category
+                    AND cl_any.id_lang = ' . (int) $languageId . '
+                    AND cl_any.id_shop = (
+                        SELECT MIN(cl3.id_shop)
+                        FROM `' . _DB_PREFIX_ . 'category_lang` cl3
+                        WHERE cl3.id_category = c.id_category
+                            AND cl3.id_lang = ' . (int) $languageId . '
+                    )
                 WHERE c.id_parent = ' . (int) $parentId . '
+                    AND (cl_shop.id_category IS NOT NULL OR cl_default.id_category IS NOT NULL OR cl_any.id_category IS NOT NULL)
                 ORDER BY c.id_category ASC';
 
         try {
@@ -576,7 +606,7 @@ class InternautenCategories extends Module
         $categoryShopHasActiveColumn = $this->categoryShopHasActiveColumn();
         $categoryShopActiveFilter = $categoryShopHasActiveColumn ? "\n                    AND cs.active = 1" : '';
 
-        $sql = 'SELECT c.id_category, COALESCE(cl_shop.name, cl_default.name) AS name
+        $sql = 'SELECT c.id_category, COALESCE(cl_shop.name, cl_default.name, cl_any.name) AS name
                 FROM `' . _DB_PREFIX_ . 'category` c
                 INNER JOIN `' . _DB_PREFIX_ . 'category_shop` cs
                     ON cs.id_category = c.id_category
@@ -589,8 +619,17 @@ class InternautenCategories extends Module
                     ON cl_default.id_category = c.id_category
                     AND cl_default.id_lang = ' . (int) $languageId . '
                     AND cl_default.id_shop = 0
+                LEFT JOIN `' . _DB_PREFIX_ . 'category_lang` cl_any
+                    ON cl_any.id_category = c.id_category
+                    AND cl_any.id_lang = ' . (int) $languageId . '
+                    AND cl_any.id_shop = (
+                        SELECT MIN(cl3.id_shop)
+                        FROM `' . _DB_PREFIX_ . 'category_lang` cl3
+                        WHERE cl3.id_category = c.id_category
+                            AND cl3.id_lang = ' . (int) $languageId . '
+                    )
                 WHERE c.id_parent > 0
-                    AND (cl_shop.id_category IS NOT NULL OR cl_default.id_category IS NOT NULL)
+                    AND (cl_shop.id_category IS NOT NULL OR cl_default.id_category IS NOT NULL OR cl_any.id_category IS NOT NULL)
                     AND c.active = 1
                     ' . $categoryShopActiveFilter . '
                     AND NOT EXISTS (
@@ -642,7 +681,7 @@ class InternautenCategories extends Module
             ? '(c.active = 0 OR cs.active = 0)'
             : 'c.active = 0';
 
-        $sql = 'SELECT c.id_category, COALESCE(cl_shop.name, cl_default.name) AS name
+        $sql = 'SELECT c.id_category, COALESCE(cl_shop.name, cl_default.name, cl_any.name) AS name
                 FROM `' . _DB_PREFIX_ . 'category` c
                 INNER JOIN `' . _DB_PREFIX_ . 'category_shop` cs
                     ON cs.id_category = c.id_category
@@ -655,8 +694,17 @@ class InternautenCategories extends Module
                     ON cl_default.id_category = c.id_category
                     AND cl_default.id_lang = ' . (int) $languageId . '
                     AND cl_default.id_shop = 0
+                LEFT JOIN `' . _DB_PREFIX_ . 'category_lang` cl_any
+                    ON cl_any.id_category = c.id_category
+                    AND cl_any.id_lang = ' . (int) $languageId . '
+                    AND cl_any.id_shop = (
+                        SELECT MIN(cl3.id_shop)
+                        FROM `' . _DB_PREFIX_ . 'category_lang` cl3
+                        WHERE cl3.id_category = c.id_category
+                            AND cl3.id_lang = ' . (int) $languageId . '
+                    )
                 WHERE c.id_parent > 0
-                    AND (cl_shop.id_category IS NOT NULL OR cl_default.id_category IS NOT NULL)
+                    AND (cl_shop.id_category IS NOT NULL OR cl_default.id_category IS NOT NULL OR cl_any.id_category IS NOT NULL)
                     AND ' . $hiddenFilter . '
                     AND EXISTS (
                         SELECT 1
@@ -866,7 +914,56 @@ class InternautenCategories extends Module
                     AND cl.id_lang IN (' . implode(',', $languageIds) . ')
                     AND cl.id_shop = ' . (int) $shopId . '
                 WHERE c.id_parent = ' . (int) $parentId . '
-                ORDER BY c.id_category ASC';
+                UNION ALL
+                SELECT c.id_category, cl.id_lang, cl.name
+                FROM `' . _DB_PREFIX_ . 'category` c
+                INNER JOIN `' . _DB_PREFIX_ . 'category_shop` cs
+                    ON cs.id_category = c.id_category
+                    AND cs.id_shop = ' . (int) $shopId . '
+                INNER JOIN `' . _DB_PREFIX_ . 'category_lang` cl
+                    ON cl.id_category = c.id_category
+                    AND cl.id_lang IN (' . implode(',', $languageIds) . ')
+                    AND cl.id_shop = 0
+                WHERE c.id_parent = ' . (int) $parentId . '
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM `' . _DB_PREFIX_ . 'category_lang` cl_shop
+                        WHERE cl_shop.id_category = c.id_category
+                            AND cl_shop.id_lang = cl.id_lang
+                            AND cl_shop.id_shop = ' . (int) $shopId . '
+                    )
+                UNION ALL
+                SELECT c.id_category, cl.id_lang, cl.name
+                FROM `' . _DB_PREFIX_ . 'category` c
+                INNER JOIN `' . _DB_PREFIX_ . 'category_shop` cs
+                    ON cs.id_category = c.id_category
+                    AND cs.id_shop = ' . (int) $shopId . '
+                INNER JOIN `' . _DB_PREFIX_ . 'category_lang` cl
+                    ON cl.id_category = c.id_category
+                    AND cl.id_lang IN (' . implode(',', $languageIds) . ')
+                    AND cl.id_shop = (
+                        SELECT MIN(cl_any.id_shop)
+                        FROM `' . _DB_PREFIX_ . 'category_lang` cl_any
+                        WHERE cl_any.id_category = c.id_category
+                            AND cl_any.id_lang = cl.id_lang
+                            AND cl_any.id_shop NOT IN (' . (int) $shopId . ', 0)
+                    )
+                WHERE c.id_parent = ' . (int) $parentId . '
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM `' . _DB_PREFIX_ . 'category_lang` cl_shop
+                        WHERE cl_shop.id_category = c.id_category
+                            AND cl_shop.id_lang = cl.id_lang
+                            AND cl_shop.id_shop = ' . (int) $shopId . '
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM `' . _DB_PREFIX_ . 'category_lang` cl_zero
+                        WHERE cl_zero.id_category = c.id_category
+                            AND cl_zero.id_lang = cl.id_lang
+                            AND cl_zero.id_shop = 0
+                    )
+                ORDER BY id_category ASC';
 
         $rows = Db::getInstance()->executeS($sql);
 
@@ -1161,7 +1258,7 @@ class InternautenCategories extends Module
     private function getCategoryNavigatorChildren($parentId, $languageId, $shopId)
     {
         $sql = 'SELECT c.id_category,
-                    COALESCE(cl_shop.name, cl_default.name) AS name,
+                    COALESCE(cl_shop.name, cl_default.name, cl_any.name) AS name,
                     (
                         SELECT COUNT(*)
                         FROM `' . _DB_PREFIX_ . 'category` c2
@@ -1182,8 +1279,17 @@ class InternautenCategories extends Module
                     ON cl_default.id_category = c.id_category
                     AND cl_default.id_lang = ' . (int) $languageId . '
                     AND cl_default.id_shop = 0
+                LEFT JOIN `' . _DB_PREFIX_ . 'category_lang` cl_any
+                    ON cl_any.id_category = c.id_category
+                    AND cl_any.id_lang = ' . (int) $languageId . '
+                    AND cl_any.id_shop = (
+                        SELECT MIN(cl3.id_shop)
+                        FROM `' . _DB_PREFIX_ . 'category_lang` cl3
+                        WHERE cl3.id_category = c.id_category
+                            AND cl3.id_lang = ' . (int) $languageId . '
+                    )
                 WHERE c.id_parent = ' . (int) $parentId . '
-                    AND (cl_shop.id_category IS NOT NULL OR cl_default.id_category IS NOT NULL)
+                    AND (cl_shop.id_category IS NOT NULL OR cl_default.id_category IS NOT NULL OR cl_any.id_category IS NOT NULL)
                 ORDER BY name ASC';
 
         $rows = Db::getInstance()->executeS($sql);
@@ -1208,26 +1314,20 @@ class InternautenCategories extends Module
         $defaultParentId = (int) Configuration::get('PS_HOME_CATEGORY');
         $configuredParentRaw = trim((string) Configuration::get(self::CONFIG_CATEGORY_ID));
         $selectedSuffix = $configuredParentRaw !== '' ? ' ' . (int) $configuredParentRaw : '';
-        $ajaxUrl = AdminController::$currentIndex
-            . '&configure=' . $this->name
-            . '&token=' . Tools::getAdminTokenLite('AdminModules')
-            . '&ajax=1&action=' . self::AJAX_ACTION_CATEGORY_CHILDREN;
-        $emptyCategoriesAjaxUrl = AdminController::$currentIndex
-            . '&configure=' . $this->name
-            . '&token=' . Tools::getAdminTokenLite('AdminModules')
-            . '&ajax=1&action=' . self::AJAX_ACTION_EMPTY_CATEGORIES;
-        $hideEmptyCategoriesAjaxUrl = AdminController::$currentIndex
-            . '&configure=' . $this->name
-            . '&token=' . Tools::getAdminTokenLite('AdminModules')
-            . '&ajax=1&action=' . self::AJAX_ACTION_HIDE_EMPTY_CATEGORIES;
-        $hiddenWithProductsAjaxUrl = AdminController::$currentIndex
-            . '&configure=' . $this->name
-            . '&token=' . Tools::getAdminTokenLite('AdminModules')
-            . '&ajax=1&action=' . self::AJAX_ACTION_HIDDEN_WITH_PRODUCTS;
-        $showHiddenCategoriesAjaxUrl = AdminController::$currentIndex
-            . '&configure=' . $this->name
-            . '&token=' . Tools::getAdminTokenLite('AdminModules')
-            . '&ajax=1&action=' . self::AJAX_ACTION_SHOW_HIDDEN_CATEGORIES;
+        $ajaxBaseUrl = $this->context->link->getAdminLink(
+            'AdminModules',
+            true,
+            [],
+            [
+                'configure' => $this->name,
+            ]
+        );
+
+        $ajaxUrl = $ajaxBaseUrl . '&ajax=1&action=' . self::AJAX_ACTION_CATEGORY_CHILDREN;
+        $emptyCategoriesAjaxUrl = $ajaxBaseUrl . '&ajax=1&action=' . self::AJAX_ACTION_EMPTY_CATEGORIES;
+        $hideEmptyCategoriesAjaxUrl = $ajaxBaseUrl . '&ajax=1&action=' . self::AJAX_ACTION_HIDE_EMPTY_CATEGORIES;
+        $hiddenWithProductsAjaxUrl = $ajaxBaseUrl . '&ajax=1&action=' . self::AJAX_ACTION_HIDDEN_WITH_PRODUCTS;
+        $showHiddenCategoriesAjaxUrl = $ajaxBaseUrl . '&ajax=1&action=' . self::AJAX_ACTION_SHOW_HIDDEN_CATEGORIES;
 
         $texts = [
             'title' => $this->l('Category navigator'),
@@ -1291,6 +1391,33 @@ class InternautenCategories extends Module
     var showHiddenCategoriesAjaxUrl = ' . json_encode($showHiddenCategoriesAjaxUrl) . ';
     var rootParentId = ' . (int) $defaultParentId . ';
     var stateStack = [];
+
+    function simplifyAjaxErrorMessage(error, fallbackMessage) {
+        if (!error || !error.message) {
+            return fallbackMessage;
+        }
+
+        var message = String(error.message);
+        if (message.indexOf("Invalid security token") !== -1 || message.indexOf("token") !== -1) {
+            return "Security token invalid. Please reload the module page and try again.";
+        }
+
+        return fallbackMessage + " " + message;
+    }
+
+    function fetchJson(url, options) {
+        return fetch(url, options || {
+            credentials: "same-origin"
+        }).then(function (response) {
+            return response.text().then(function (payload) {
+                try {
+                    return JSON.parse(payload);
+                } catch (parseError) {
+                    throw new Error(payload ? payload.substring(0, 240) : "Empty response");
+                }
+            });
+        });
+    }
 
     function findParentListItem(element, listRoot) {
         var current = element;
@@ -1412,10 +1539,8 @@ class InternautenCategories extends Module
     function loadChildren(parentId) {
         setLoading();
 
-        fetch(ajaxBaseUrl + "&parent_id=" + encodeURIComponent(parentId), {
+        fetchJson(ajaxBaseUrl + "&parent_id=" + encodeURIComponent(parentId), {
             credentials: "same-origin"
-        }).then(function (response) {
-            return response.json();
         }).then(function (data) {
             if (!data || !data.ok) {
                 setError((data && data.error) ? data.error : texts.error);
@@ -1423,8 +1548,8 @@ class InternautenCategories extends Module
             }
 
             renderChildren(data.children);
-        }).catch(function () {
-            setError(texts.error);
+        }).catch(function (error) {
+            setError(simplifyAjaxErrorMessage(error, texts.error));
         });
     }
 
@@ -1510,10 +1635,8 @@ class InternautenCategories extends Module
             emptyDialog.setAttribute("open", "open");
         }
 
-        fetch(emptyCategoriesAjaxUrl, {
+        fetchJson(emptyCategoriesAjaxUrl, {
             credentials: "same-origin"
-        }).then(function (response) {
-            return response.json();
         }).then(function (data) {
             if (!data || !data.ok) {
                 emptyDialogList.innerHTML = "<li class=\"text-danger\">" + ((data && data.error) ? data.error : texts.empty_categories_error) + "</li>";
@@ -1521,8 +1644,8 @@ class InternautenCategories extends Module
             }
 
             renderEmptyCategories(data.categories);
-        }).catch(function () {
-            emptyDialogList.innerHTML = "<li class=\"text-danger\">" + texts.empty_categories_error + "</li>";
+        }).catch(function (error) {
+            emptyDialogList.innerHTML = "<li class=\"text-danger\">" + simplifyAjaxErrorMessage(error, texts.empty_categories_error) + "</li>";
             updateHideSelectedButtonState();
         });
     }
@@ -1553,10 +1676,8 @@ class InternautenCategories extends Module
             hiddenDialog.setAttribute("open", "open");
         }
 
-        fetch(hiddenWithProductsAjaxUrl, {
+        fetchJson(hiddenWithProductsAjaxUrl, {
             credentials: "same-origin"
-        }).then(function (response) {
-            return response.json();
         }).then(function (data) {
             if (!data || !data.ok) {
                 hiddenDialogList.innerHTML = "<li class=\"text-danger\">" + ((data && data.error) ? data.error : texts.hidden_categories_error) + "</li>";
@@ -1564,8 +1685,8 @@ class InternautenCategories extends Module
             }
 
             renderHiddenCategories(data.categories);
-        }).catch(function () {
-            hiddenDialogList.innerHTML = "<li class=\"text-danger\">" + texts.hidden_categories_error + "</li>";
+        }).catch(function (error) {
+            hiddenDialogList.innerHTML = "<li class=\"text-danger\">" + simplifyAjaxErrorMessage(error, texts.hidden_categories_error) + "</li>";
             updateShowSelectedButtonState();
         });
     }
@@ -1642,15 +1763,13 @@ class InternautenCategories extends Module
             emptyDialogHideBtn.disabled = true;
             setEmptyDialogStatus(texts.hiding_in_progress, false);
 
-            fetch(hideEmptyCategoriesAjaxUrl, {
+            fetchJson(hideEmptyCategoriesAjaxUrl, {
                 method: "POST",
                 credentials: "same-origin",
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
                 },
                 body: "category_ids=" + encodeURIComponent(selectedCategoryIds.join(","))
-            }).then(function (response) {
-                return response.json();
             }).then(function (data) {
                 if (!data || !data.ok) {
                     setEmptyDialogStatus((data && data.error) ? data.error : texts.hide_selected_error, true);
@@ -1669,8 +1788,8 @@ class InternautenCategories extends Module
 
                 setEmptyDialogStatus(data.message ? data.message : texts.hide_selected_success, false);
                 updateHideSelectedButtonState();
-            }).catch(function () {
-                setEmptyDialogStatus(texts.hide_selected_error, true);
+            }).catch(function (error) {
+                setEmptyDialogStatus(simplifyAjaxErrorMessage(error, texts.hide_selected_error), true);
                 updateHideSelectedButtonState();
             });
         });
@@ -1712,15 +1831,13 @@ class InternautenCategories extends Module
             hiddenDialogShowBtn.disabled = true;
             setHiddenDialogStatus(texts.hiding_in_progress, false);
 
-            fetch(showHiddenCategoriesAjaxUrl, {
+            fetchJson(showHiddenCategoriesAjaxUrl, {
                 method: "POST",
                 credentials: "same-origin",
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
                 },
                 body: "category_ids=" + encodeURIComponent(selectedCategoryIds.join(","))
-            }).then(function (response) {
-                return response.json();
             }).then(function (data) {
                 if (!data || !data.ok) {
                     setHiddenDialogStatus((data && data.error) ? data.error : texts.show_selected_error, true);
@@ -1739,8 +1856,8 @@ class InternautenCategories extends Module
 
                 setHiddenDialogStatus(data.message ? data.message : texts.show_selected_success, false);
                 updateShowSelectedButtonState();
-            }).catch(function () {
-                setHiddenDialogStatus(texts.show_selected_error, true);
+            }).catch(function (error) {
+                setHiddenDialogStatus(simplifyAjaxErrorMessage(error, texts.show_selected_error), true);
                 updateShowSelectedButtonState();
             });
         });
