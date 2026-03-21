@@ -25,7 +25,7 @@ class InternautenCategories extends Module
     {
         $this->name = 'internautencategories';
         $this->tab = 'administration';
-        $this->version = '0.1.17';
+        $this->version = '0.2.17';
         $this->author = 'die.internauten.ch';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -576,16 +576,21 @@ class InternautenCategories extends Module
         $categoryShopHasActiveColumn = $this->categoryShopHasActiveColumn();
         $categoryShopActiveFilter = $categoryShopHasActiveColumn ? "\n                    AND cs.active = 1" : '';
 
-        $sql = 'SELECT c.id_category, cl.name
+        $sql = 'SELECT c.id_category, COALESCE(cl_shop.name, cl_default.name) AS name
                 FROM `' . _DB_PREFIX_ . 'category` c
                 INNER JOIN `' . _DB_PREFIX_ . 'category_shop` cs
                     ON cs.id_category = c.id_category
                     AND cs.id_shop = ' . (int) $shopId . '
-                INNER JOIN `' . _DB_PREFIX_ . 'category_lang` cl
-                    ON cl.id_category = c.id_category
-                    AND cl.id_lang = ' . (int) $languageId . '
-                    AND cl.id_shop = ' . (int) $shopId . '
+                LEFT JOIN `' . _DB_PREFIX_ . 'category_lang` cl_shop
+                    ON cl_shop.id_category = c.id_category
+                    AND cl_shop.id_lang = ' . (int) $languageId . '
+                    AND cl_shop.id_shop = ' . (int) $shopId . '
+                LEFT JOIN `' . _DB_PREFIX_ . 'category_lang` cl_default
+                    ON cl_default.id_category = c.id_category
+                    AND cl_default.id_lang = ' . (int) $languageId . '
+                    AND cl_default.id_shop = 0
                 WHERE c.id_parent > 0
+                    AND (cl_shop.id_category IS NOT NULL OR cl_default.id_category IS NOT NULL)
                     AND c.active = 1
                     ' . $categoryShopActiveFilter . '
                     AND NOT EXISTS (
@@ -614,7 +619,7 @@ class InternautenCategories extends Module
                                 OR (sa.id_shop = 0 AND sa.id_shop_group = ' . (int) $shopGroupId . ')
                             )
                     )
-                ORDER BY cl.name ASC';
+                ORDER BY name ASC';
 
         $rows = Db::getInstance()->executeS($sql);
         if (!is_array($rows)) {
@@ -637,16 +642,21 @@ class InternautenCategories extends Module
             ? '(c.active = 0 OR cs.active = 0)'
             : 'c.active = 0';
 
-        $sql = 'SELECT c.id_category, cl.name
+        $sql = 'SELECT c.id_category, COALESCE(cl_shop.name, cl_default.name) AS name
                 FROM `' . _DB_PREFIX_ . 'category` c
                 INNER JOIN `' . _DB_PREFIX_ . 'category_shop` cs
                     ON cs.id_category = c.id_category
                     AND cs.id_shop = ' . (int) $shopId . '
-                INNER JOIN `' . _DB_PREFIX_ . 'category_lang` cl
-                    ON cl.id_category = c.id_category
-                    AND cl.id_lang = ' . (int) $languageId . '
-                    AND cl.id_shop = ' . (int) $shopId . '
+                LEFT JOIN `' . _DB_PREFIX_ . 'category_lang` cl_shop
+                    ON cl_shop.id_category = c.id_category
+                    AND cl_shop.id_lang = ' . (int) $languageId . '
+                    AND cl_shop.id_shop = ' . (int) $shopId . '
+                LEFT JOIN `' . _DB_PREFIX_ . 'category_lang` cl_default
+                    ON cl_default.id_category = c.id_category
+                    AND cl_default.id_lang = ' . (int) $languageId . '
+                    AND cl_default.id_shop = 0
                 WHERE c.id_parent > 0
+                    AND (cl_shop.id_category IS NOT NULL OR cl_default.id_category IS NOT NULL)
                     AND ' . $hiddenFilter . '
                     AND EXISTS (
                         SELECT 1
@@ -666,7 +676,7 @@ class InternautenCategories extends Module
                                 OR (sa.id_shop = 0 AND sa.id_shop_group = ' . (int) $shopGroupId . ')
                             )
                     )
-                ORDER BY cl.name ASC';
+                ORDER BY name ASC';
 
         $rows = Db::getInstance()->executeS($sql);
         if (!is_array($rows)) {
@@ -1150,7 +1160,8 @@ class InternautenCategories extends Module
 
     private function getCategoryNavigatorChildren($parentId, $languageId, $shopId)
     {
-        $sql = 'SELECT c.id_category, cl.name,
+        $sql = 'SELECT c.id_category,
+                    COALESCE(cl_shop.name, cl_default.name) AS name,
                     (
                         SELECT COUNT(*)
                         FROM `' . _DB_PREFIX_ . 'category` c2
@@ -1163,12 +1174,17 @@ class InternautenCategories extends Module
                 INNER JOIN `' . _DB_PREFIX_ . 'category_shop` cs
                     ON cs.id_category = c.id_category
                     AND cs.id_shop = ' . (int) $shopId . '
-                INNER JOIN `' . _DB_PREFIX_ . 'category_lang` cl
-                    ON cl.id_category = c.id_category
-                    AND cl.id_lang = ' . (int) $languageId . '
-                    AND cl.id_shop = ' . (int) $shopId . '
+                LEFT JOIN `' . _DB_PREFIX_ . 'category_lang` cl_shop
+                    ON cl_shop.id_category = c.id_category
+                    AND cl_shop.id_lang = ' . (int) $languageId . '
+                    AND cl_shop.id_shop = ' . (int) $shopId . '
+                LEFT JOIN `' . _DB_PREFIX_ . 'category_lang` cl_default
+                    ON cl_default.id_category = c.id_category
+                    AND cl_default.id_lang = ' . (int) $languageId . '
+                    AND cl_default.id_shop = 0
                 WHERE c.id_parent = ' . (int) $parentId . '
-                ORDER BY cl.name ASC';
+                    AND (cl_shop.id_category IS NOT NULL OR cl_default.id_category IS NOT NULL)
+                ORDER BY name ASC';
 
         $rows = Db::getInstance()->executeS($sql);
         if (!is_array($rows)) {
