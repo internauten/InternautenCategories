@@ -88,22 +88,22 @@ Das bereitstellen der Kopie einer VM ist im [README des Repositoris InternautenB
 ### Get Module and install it
 
 1. git clone yor fork of this repo
-    ```bash
-    cd ~ 
-    git clone https://github.com/yourgithub/InternautenCategories.git
-    ```
+   ```bash
+   cd ~
+   git clone https://github.com/yourgithub/InternautenCategories.git
+   ```
 2. set owner, goup and rights
-    ```bash
-    sudo chown -R www-data:www-data ~/InternautenCategories/internautencategories
-    ```
+   ```bash
+   sudo chown -R www-data:www-data ~/InternautenCategories/internautencategories
+   ```
 3. Create symlink and set group:owner
-    ```bash
-    sudo ln -s ~/InternautenCategories/internautencategories /var/www/prestashop/modules/internautencategories
-    sudo chown -h www-data:www-data ~/InternautenCategories/internautencategories
-    sudo chown -h www-data:www-data /var/www/prestashop/modules/internautencategories
-    ```
-4. Activate and configure Module in Prestashop   
-    In Prestashop backend go to Module Manager / not installed Modules and install the module. 
+   ```bash
+   sudo ln -s ~/InternautenCategories/internautencategories /var/www/prestashop/modules/internautencategories
+   sudo chown -h www-data:www-data ~/InternautenCategories/internautencategories
+   sudo chown -h www-data:www-data /var/www/prestashop/modules/internautencategories
+   ```
+4. Activate and configure Module in Prestashop  
+   In Prestashop backend go to Module Manager / not installed Modules and install the module.
 
 ### Nach Änderungen immer cache leeren
 
@@ -114,13 +114,18 @@ sudo rm -rf var/cache/*
 
 ## Anwendung Create Subcategoiries
 
-Erstellt Subkategorien zu Kategorien.  
+Erstellt Subkategorien zu Kategorien.
 
 Muster Subkategorie:InKategorie
 
 Beispiel Input:
 
 ```text
+Sorte:Startseite
+Diverses:Startseite
+Abfüller:Startseite
+Destillerien:Startseite
+Länder:Startseite
 Single Malt Whisky:Sorte
 Irish Whiskey:Sorte
 Blended Whisky:Sorte
@@ -193,11 +198,9 @@ This project is licensed under the MIT License. See details [`LICENSE`](LICENSE)
 
 Copyright (c) 2026 die.internauten.ch GmbH
 
-
 Diverses:Diverses
 Food:Diverses
 WoW Club:Diverses
 Literatur:Diverses
 Gutscheine:Diverses
 Gläser:Diverses
-
