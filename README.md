@@ -192,15 +192,28 @@ Use a dry-run to preview the tag command without creating or pushing anything:
 ./scripts/tag-from-module-version.sh --dry-run
 ```
 
+## Develope
+
+Dammit die Container bei jedem neuen Modul nicht jedesmal neu erstellt werden müssen, versuchen wir es mit symlinks.
+
+Voraussetzungen: im compose hat es unter volumes einen Eintrag - /home/dmo/internauten:/internauten
+
+Bash ins WSL2 und holen des Repos:
+
+```bash
+cd ~/internauten
+git clone https://github.com/internauten/InternautenCategories.git
+```
+
+Bash in den Container und dann
+
+```bash
+ln -s /internauten/InternautenCategories/internautencategories /var/www/html/modules/internautencategories
+```
+
 ## License
 
 This project is licensed under the MIT License. See details [`LICENSE`](LICENSE).
 
 Copyright (c) 2026 die.internauten.ch GmbH
 
-Diverses:Diverses
-Food:Diverses
-WoW Club:Diverses
-Literatur:Diverses
-Gutscheine:Diverses
-Gläser:Diverses
