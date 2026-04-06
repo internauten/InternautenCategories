@@ -25,8 +25,8 @@ class InternautenCategories extends Module
     {
         $this->name = 'internautencategories';
         $this->tab = 'administration';
-        $this->version = '0.2.18';
-        $this->author = 'die.internauten.ch';
+        $this->version = '1.0.0';
+        $this->author = 'die.internauten.ch GmbH';
         $this->need_instance = 0;
         $this->bootstrap = true;
 
