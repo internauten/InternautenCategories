@@ -36,3 +36,6 @@ coverage/
 **/var/logs/
 internautencategories/config.xml
 internauteninfinityscroll.php
+
+# PrestaShop-generated module config files
+config*.xml
